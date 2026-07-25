@@ -22,6 +22,15 @@
       "secretEnv": [
         "MYSQL_ROOT_PASSWORD"
       ],
+      "healthcheck": {
+        "test": [
+          "CMD-SHELL",
+          "mysqladmin ping -uroot -p\"$MYSQL_ROOT_PASSWORD\" --silent"
+        ],
+        "interval": "10s",
+        "timeout": "5s",
+        "retries": 30
+      },
       "volumes": [
         "ghost_db:/var/lib/mysql"
       ],
