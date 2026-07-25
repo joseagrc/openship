@@ -105,8 +105,10 @@ export default function AppInstallPage() {
   // from the API) is fetched so a repo-fresh app opens + installs without a redeploy.
   const bundledTemplate = useMemo(() => getAppTemplate(appId), [appId]);
   const [template, setTemplate] = useState(bundledTemplate);
+  const [templateChecked, setTemplateChecked] = useState(false);
   useEffect(() => {
     setTemplate(bundledTemplate);
+    setTemplateChecked(false);
     let cancelled = false;
     appsApi
       .template(appId)
@@ -115,6 +117,9 @@ export default function AppInstallPage() {
       })
       .catch(() => {
         /* keep the bundled template */
+      })
+      .finally(() => {
+        if (!cancelled) setTemplateChecked(true);
       });
     return () => {
       cancelled = true;
@@ -187,10 +192,11 @@ export default function AppInstallPage() {
 
   // Unknown / non-installable / flow apps don't belong here.
   useEffect(() => {
+    if (!templateChecked) return;
     if (!template || template.kind === "flow" || !template.available) {
       router.replace("/apps/new");
     }
-  }, [template, appId, router]);
+  }, [template, templateChecked, appId, router]);
 
   // ── Clean progress poll (status only, never raw logs) ──────────────────────
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -248,7 +254,7 @@ export default function AppInstallPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase, deploymentId, baseDomain]);
 
-  if (!template) return null;
+  if (!template || !templateChecked) return null;
 
   const setField = (f: AppSettingField, v: FormValue) =>
     setValues((prev) => ({ ...prev, [fk(f.service, f.key)]: v }));
