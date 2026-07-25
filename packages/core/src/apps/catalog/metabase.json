@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "metabase",
   "name": "Metabase",
   "description": "Open-source business intelligence — dashboards and questions over your data.",

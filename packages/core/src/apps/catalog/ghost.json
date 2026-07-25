@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "ghost",
   "name": "Ghost",
   "description": "Modern publishing platform for blogs, newsletters, and membership sites.",

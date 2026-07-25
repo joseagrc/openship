@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "it-tools",
   "name": "IT-Tools",
   "description": "A handy collection of developer and sysadmin utilities. No login, no setup.",
