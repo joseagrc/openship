@@ -57,7 +57,7 @@ import { resolveServicePort } from "./domain-helpers";
 import { buildCompositeRegistration } from "./composite-route";
 import { serviceKind } from "./project-services";
 import { buildUpstreamUrl, resolveRouteStrategy } from "../../../lib/upstream-url";
-import { withLoopbackPublish } from "../../../lib/loopback-publish";
+import { specContainerPort, withLoopbackPublish } from "../../../lib/loopback-publish";
 
 export interface ComposeDeployResult {
   /** `reconciling` when at least one service's outcome is UNKNOWN because the
@@ -165,6 +165,22 @@ function hostPublishedPorts(service: Service): number[] {
     if (Number.isFinite(host)) out.push(host);
   }
   return out;
+}
+
+function declaredContainerPorts(service: Service): number[] {
+  const seen = new Set<number>();
+  for (const spec of (service.ports as string[] | null) ?? []) {
+    const port = specContainerPort(String(spec));
+    if (port) seen.add(port);
+  }
+  return [...seen];
+}
+
+function resolveRoutedContainerPort(service: Service, targetPort: number | undefined): number | undefined {
+  if (targetPort === undefined) return undefined;
+  const declared = declaredContainerPorts(service);
+  if (declared.length === 1 && !declared.includes(targetPort)) return declared[0];
+  return targetPort;
 }
 
 /**
@@ -997,7 +1013,7 @@ export async function deployComposeServices(
     // for direct access are preserved. Cloud handles exposure itself; bare/no-
     // executor can't publish → skip (route falls back to container-IP/loopback).
     const composeRouteStrategy = resolveRouteStrategy(project.routeStrategy);
-    const routedContainerPort = proxyRoutes[0]?.targetPort;
+    const routedContainerPort = resolveRoutedContainerPort(svc, proxyRoutes[0]?.targetPort);
     let servicePinnedHostPort: number | undefined;
     if (
       composeRouteStrategy === "loopback-port" &&
