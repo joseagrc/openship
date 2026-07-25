@@ -586,8 +586,11 @@ ${webhookLocation}${extraLocations}
   async provisionCert(domain: string, opts?: { onLog?: (line: string) => void }): Promise<SslResult> {
     assertValidDomain(domain);
 
-    // Check if cert already exists
+    // Check if cert already exists. Still re-register the route: a prior run may
+    // have issued/reused the cert but left the vhost HTTP-only, which makes
+    // HTTPS fall through to the first SSL server on the box.
     if (await this.certsExist(domain)) {
+      await this.reregisterRouteWithTls(domain).catch(() => undefined);
       return this.readCertInfo(domain);
     }
 
@@ -625,38 +628,8 @@ ${webhookLocation}${extraLocations}
       throw new Error(summarizeCertbotFailure(safeErrorMessage(err), domain));
     }
 
-    // Rewrite the config with SSL now that certs exist
-    const slug = this.domainSlug(domain);
-    const configPath = join(this.sitesDir, `${slug}.conf`);
-
-    // Prefer the persisted RouteConfig sidecar so the re-register keeps every
-    // location (composite proxyLocations + webhookProxy), not just the primary.
-    try {
-      const state = await this._readFile(this.routeStatePath(slug));
-      const saved = JSON.parse(state) as RouteConfig;
-      await this.registerRoute({ ...saved, domain, tls: true });
-      return this.ensureIssued(domain, certonlyOut);
-    } catch {
-      // No sidecar (legacy route or unreadable) - fall back to scraping the conf.
-    }
-
-    try {
-      const existing = await this._readFile(configPath);
-      const targetMatch = existing.match(/proxy_pass\s+([^;]+);/);
-      if (targetMatch) {
-        await this.registerRoute({ domain, targetUrl: targetMatch[1], tls: true });
-        return this.ensureIssued(domain, certonlyOut);
-      }
-
-      const rootMatch = existing.match(/root\s+([^;]+);/);
-      if (rootMatch) {
-        await this.registerRoute({ domain, staticRoot: rootMatch[1], tls: true });
-        return this.ensureIssued(domain, certonlyOut);
-      }
-    } catch {
-      // Config doesn't exist - cert provisioned but no route yet
-    }
-
+    // Rewrite the config with SSL now that certs exist.
+    await this.reregisterRouteWithTls(domain).catch(() => undefined);
     return this.ensureIssued(domain, certonlyOut);
   }
 
@@ -697,6 +670,7 @@ ${webhookLocation}${extraLocations}
     }
 
     await this._exec("certbot", ["renew", "--cert-name", domain, "--non-interactive"]);
+    await this.reregisterRouteWithTls(domain).catch(() => undefined);
     await this.reload();
 
     return this.readCertInfo(domain);
@@ -729,23 +703,47 @@ ${webhookLocation}${extraLocations}
     await this._writeFile(join(dir, "fullchain.pem"), cert.certPem);
     await this._writeFile(join(dir, "privkey.pem"), cert.keyPem);
 
-    // Re-register the vhost with TLS now that the cert is on disk. Prefer the
-    // persisted RouteConfig sidecar so every location survives (same as
-    // provisionCert); if there's no route yet, the next deploy's route plan
-    // picks up tls:true from the manualSsl gate.
-    const slug = this.domainSlug(domain);
-    try {
-      const state = await this._readFile(this.routeStatePath(slug));
-      const saved = JSON.parse(state) as RouteConfig;
-      await this.registerRoute({ ...saved, domain, tls: true });
-    } catch {
-      // No sidecar (domain not routed yet) — cert is staged on disk regardless.
-    }
+    // Re-register the vhost with TLS now that the cert is on disk.
+    await this.reregisterRouteWithTls(domain).catch(() => undefined);
 
     return { domain, expiresAt, issuer: "manual", verified: true, reason: "issued" };
   }
 
   // ── Helpers ──────────────────────────────────────────────────────────
+
+  private async reregisterRouteWithTls(domain: string): Promise<boolean> {
+    const slug = this.domainSlug(domain);
+
+    // Prefer the persisted RouteConfig sidecar so the re-register keeps every
+    // location (composite proxyLocations + webhookProxy), not just the primary.
+    try {
+      const state = await this._readFile(this.routeStatePath(slug));
+      const saved = JSON.parse(state) as RouteConfig;
+      await this.registerRoute({ ...saved, domain, tls: true });
+      return true;
+    } catch {
+      // No sidecar (legacy route or unreadable) - fall back to scraping the conf.
+    }
+
+    try {
+      const existing = await this._readFile(join(this.sitesDir, `${slug}.conf`));
+      const targetMatch = existing.match(/proxy_pass\s+([^;]+);/);
+      if (targetMatch) {
+        await this.registerRoute({ domain, targetUrl: targetMatch[1], tls: true });
+        return true;
+      }
+
+      const rootMatch = existing.match(/root\s+([^;]+);/);
+      if (rootMatch) {
+        await this.registerRoute({ domain, staticRoot: rootMatch[1], tls: true });
+        return true;
+      }
+    } catch {
+      // Config doesn't exist - cert is staged but no route exists yet.
+    }
+
+    return false;
+  }
 
   private domainSlug(domain: string): string {
     return domain.replace(/[^a-zA-Z0-9-]/g, "-").replace(/-+/g, "-");
