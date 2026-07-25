@@ -18,6 +18,9 @@ import { APP_TEMPLATES, isValidAppTemplate, type AppTemplate } from "@repo/core"
 const REMOTE_URL =
   "https://raw.githubusercontent.com/oblien/openship/main/packages/core/src/apps/catalog.json";
 const TTL_MS = 600_000; // 10 minutes
+const REMOTE_ENABLED = !["0", "false", "off", "no"].includes(
+  (process.env.OPENSHIP_APP_CATALOG_REMOTE ?? "true").trim().toLowerCase(),
+);
 
 let cache: readonly AppTemplate[] = APP_TEMPLATES; // seed with bundled
 let cachedAt = 0;
@@ -44,6 +47,10 @@ async function fetchRemote(): Promise<AppTemplate[] | null> {
 }
 
 function refresh(): void {
+  if (!REMOTE_ENABLED) {
+    cachedAt = Date.now();
+    return;
+  }
   if (refreshing) return;
   refreshing = true;
   void fetchRemote()
