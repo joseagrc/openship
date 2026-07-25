@@ -638,9 +638,25 @@ export async function deployComposeServices(
 
   // loopback-port routing (compose): host ports pinned this deploy, so two
   // services in the same pass never collide on an allocation. Seed with every
-  // previous service's port so a fresh allocation never lands on one that a
-  // later service is about to reuse.
+  // active Openship-pinned service port in this org, not only this project's
+  // previous deployment: when the API itself runs in Docker, the generic socket
+  // scan sees the API container's network namespace and can miss host-published
+  // loopback ports owned by sibling app containers.
   const usedHostPorts = new Set<number>();
+  const orgProjects = await repos.project
+    .listByOrganization(project.organizationId, { perPage: 1000 })
+    .then((r) => r.rows)
+    .catch(() => [] as Project[]);
+  for (const p of orgProjects) {
+    if (p.hostPort) usedHostPorts.add(p.hostPort);
+    if (!p.activeDeploymentId || p.id === project.id) continue;
+    const activeServiceDeps = await repos.service
+      .listByDeployment(p.activeDeploymentId)
+      .catch(() => []);
+    for (const depSvc of activeServiceDeps) {
+      if (depSvc.hostPort) usedHostPorts.add(depSvc.hostPort);
+    }
+  }
   for (const prev of previousByServiceId.values()) {
     if (prev.hostPort) usedHostPorts.add(prev.hostPort);
   }
