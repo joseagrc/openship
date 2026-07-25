@@ -372,6 +372,10 @@ export async function createServerDockerRuntime(
   organizationId: string,
 ): Promise<DockerRuntime> {
   const server = await resolveOrgServer(serverId, organizationId);
+  if (server.isLocal) {
+    return DockerRuntime.create({ transport: "socket" as const });
+  }
+
   const executor = await sshManager.acquire(server.id);
   const ssh = server.sshHost ? await buildSshConfig(server) : null;
   if (!ssh) {

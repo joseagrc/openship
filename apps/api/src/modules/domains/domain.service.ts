@@ -35,6 +35,12 @@ import type { CloudRuntime, CommandExecutor, ManualCert } from "@repo/adapters";
 export async function listDomains(ctx: RequestContext, projectId: string) {
   const project = await repos.project.findById(projectId);
   assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
+  const domains = await repos.domain.listByProject(projectId);
+
+  await Promise.all(
+    domains.map((domain) => reconcileDomainCertificateState(ctx, domain)),
+  );
+
   return repos.domain.listByProject(projectId);
 }
 
@@ -290,6 +296,45 @@ async function markDomainVerifiedActive(
     ...(ssl.issuer ? { sslIssuer: ssl.issuer } : {}),
     ...(ssl.expiresAt ? { sslExpiresAt: new Date(ssl.expiresAt) } : {}),
   });
+}
+
+/**
+ * Dashboard reads should not leave a self-hosted custom domain stuck in
+ * `pending` / `provisioning` when the serving edge already has a valid cert.
+ * This is read-only against the edge: no ACME issuance, no DNS mutation.
+ */
+async function reconcileDomainCertificateState(
+  ctx: RequestContext,
+  domain: Domain,
+): Promise<void> {
+  if (platform().target === "cloud") return;
+  if (domain.domainType !== "custom") return;
+  if (domain.externalIngress) return;
+  if (domain.sslStatus === "active" && domain.verified && domain.status === "active") return;
+
+  const shouldCheck =
+    !domain.verified ||
+    domain.status === "pending" ||
+    domain.sslStatus === "provisioning" ||
+    domain.sslStatus === "none";
+  if (!shouldCheck) return;
+
+  try {
+    const result = await verifyExistingCert(domain.hostname, {
+      projectId: domain.projectId ?? undefined,
+    });
+    if (!result.verified) return;
+
+    await markDomainVerifiedActive(domain, domain.id, {
+      issuer: result.issuer,
+      expiresAt: result.expiresAt || undefined,
+    });
+  } catch (err) {
+    console.warn(
+      `[DOMAIN] SSL state reconcile skipped for ${domain.hostname}:`,
+      safeErrorMessage(err),
+    );
+  }
 }
 
 /** The server the project's active deployment runs on (for edge/cert reads). */
