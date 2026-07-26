@@ -41,7 +41,9 @@ export async function listDomains(ctx: RequestContext, projectId: string) {
     domains.map((domain) => reconcileDomainCertificateState(ctx, domain)),
   );
 
-  return repos.domain.listByProject(projectId);
+  const refreshed = await repos.domain.listByProject(projectId);
+  await clearRoutingWarningIfDomainsAreHealthy(projectId, refreshed);
+  return refreshed;
 }
 
 // ─── Set primary ───────────────────────────────────────────────────────────────
@@ -334,6 +336,54 @@ async function reconcileDomainCertificateState(
       `[DOMAIN] SSL state reconcile skipped for ${domain.hostname}:`,
       safeErrorMessage(err),
     );
+  }
+}
+
+async function clearRoutingWarningIfDomainsAreHealthy(
+  projectId: string,
+  domains: Domain[],
+): Promise<void> {
+  const project = await repos.project.findById(projectId);
+  if (!project?.activeDeploymentId) return;
+  const deployment = await repos.deployment.findById(project.activeDeploymentId);
+  if (!deployment) return;
+
+  const meta = { ...((deployment.meta as Record<string, unknown> | null) ?? {}) };
+  if (!("edgeUnsynced" in meta) && !("deployWarning" in meta)) return;
+
+  const routedCustomDomains = domains.filter((domain) =>
+    domain.domainType === "custom" &&
+    !domain.externalIngress &&
+    domain.status === "active" &&
+    domain.sslStatus === "active" &&
+    domain.verified
+  );
+  if (routedCustomDomains.length === 0) return;
+
+  const healthy = await Promise.all(
+    routedCustomDomains.map((domain) => probeHttpsDomain(domain.hostname)),
+  );
+  if (!healthy.every(Boolean)) return;
+
+  delete meta.edgeUnsynced;
+  delete meta.deployWarning;
+  await repos.deployment.updateStatus(deployment.id, deployment.status, { meta });
+}
+
+async function probeHttpsDomain(hostname: string): Promise<boolean> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 5_000);
+  try {
+    const response = await fetch(`https://${hostname}/`, {
+      method: "GET",
+      redirect: "manual",
+      signal: controller.signal,
+    });
+    return response.status > 0 && response.status < 600;
+  } catch {
+    return false;
+  } finally {
+    clearTimeout(timer);
   }
 }
 

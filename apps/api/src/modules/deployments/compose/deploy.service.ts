@@ -183,6 +183,23 @@ function resolveRoutedContainerPort(service: Service, targetPort: number | undef
   return targetPort;
 }
 
+async function dockerPublishedHostPorts(
+  runtime: MultiServiceRuntimeAdapter,
+  allowedContainerIds: Set<string> = new Set(),
+): Promise<Set<number>> {
+  if (!(runtime instanceof DockerRuntime)) return new Set();
+  const ports = new Set<number>();
+  const containers = await runtime.listAllContainers().catch(() => []);
+  for (const container of containers) {
+    if (allowedContainerIds.has(container.id)) continue;
+    for (const port of container.ports) {
+      if (port.type !== "tcp" || !port.publicPort) continue;
+      ports.add(port.publicPort);
+    }
+  }
+  return ports;
+}
+
 /**
  * Persistent on-host root for app template config files bind-mounted into
  * service containers (Kong's `kong.yml`, Postgres init `.sql`). Sibling of the
@@ -1021,9 +1038,17 @@ export async function deployComposeServices(
       routedContainerPort !== undefined &&
       opts?.executor
     ) {
-      servicePinnedHostPort =
-        previousByServiceId.get(svc.id)?.hostPort ??
-        (await allocateHostPort(opts.executor, { avoid: usedHostPorts }));
+      const previous = previousByServiceId.get(svc.id);
+      const allowedLiveContainers = new Set<string>(
+        previous?.containerId ? [previous.containerId] : [],
+      );
+      const liveHostPorts = await dockerPublishedHostPorts(runtime, allowedLiveContainers);
+      const avoid = new Set([...usedHostPorts, ...liveHostPorts]);
+      if (previous?.hostPort) avoid.delete(previous.hostPort);
+      servicePinnedHostPort = await allocateHostPort(opts.executor, {
+        preferred: previous?.hostPort ?? undefined,
+        avoid,
+      });
       usedHostPorts.add(servicePinnedHostPort);
       serviceRuntimeConfig.ports = withLoopbackPublish(
         serviceRuntimeConfig.ports,

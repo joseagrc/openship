@@ -555,7 +555,7 @@ ${webhookLocation}${extraLocations}
     // re-register the EXACT route (proxyLocations + webhookProxy) after issuing a
     // cert, instead of regex-reconstructing it from the generated conf (which
     // only recovered the primary target and dropped composite locations).
-    await this._writeFile(this.routeStatePath(slug), JSON.stringify(route)).catch(() => undefined);
+    await this._writeFile(this.routeStatePath(slug), JSON.stringify(route));
   }
 
   private routeStatePath(slug: string): string {
