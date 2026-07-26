@@ -90,7 +90,7 @@ interface ProjectEnvironment {
   id: string;
   name: string;
   slug: string;
-  type: "production" | "preview" | "development";
+  type: "production" | "staging" | "preview" | "development";
   gitBranch: string;
   projectSlug: string;
   activeDeploymentId: string | null;
@@ -203,7 +203,7 @@ interface ProjectSettingsContextType {
   createEnvironment: (input: {
     environmentName: string;
     environmentSlug?: string;
-    environmentType?: "production" | "preview" | "development";
+    environmentType?: "production" | "staging" | "preview" | "development";
     gitBranch?: string;
     sourceMode?: "branch" | "manual";
   }) => Promise<ProjectEnvironment | null>;
@@ -649,7 +649,7 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
     async (input: {
       environmentName: string;
       environmentSlug?: string;
-      environmentType?: "production" | "preview" | "development";
+      environmentType?: "production" | "staging" | "preview" | "development";
       gitBranch?: string;
       sourceMode?: "branch" | "manual";
     }) => {

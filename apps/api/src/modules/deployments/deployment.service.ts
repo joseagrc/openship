@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { repos } from "@repo/db";
-import { NotFoundError, ForbiddenError } from "@repo/core";
+import { NotFoundError, ForbiddenError, normalizeEnvironment } from "@repo/core";
 import type { LogEntry } from "@repo/adapters";
 import type { RequestContext } from "../../lib/request-context";
 import { resolveDeploymentRuntime, type DeploymentMeta } from "../../lib/deployment-runtime";
@@ -62,7 +62,7 @@ export async function listDeployments(
     const result = await repos.deployment.listByProject(opts.projectId, {
       page: opts.page,
       perPage: opts.perPage,
-      environment: opts.environment,
+      environment: opts.environment ? normalizeEnvironment(opts.environment) : undefined,
     });
     // Mark which row is currently active so the dashboard can render the
     // "Active" chip + gate the rollback action. The schema columns
@@ -429,5 +429,4 @@ export async function getBuildLogs(
   }
   return buildSession.logs as LogEntry[];
 }
-
 

@@ -15,6 +15,7 @@ import {
   isReleaseProvider,
   isBehind,
   GITHUB_REPO,
+  normalizeEnvironment,
   type ReleaseSource,
   type UpdatableIdentity,
 } from "@repo/core";
@@ -1105,8 +1106,9 @@ export async function createProjectEnvironment(
     "development",
   );
   const environmentName = data.environmentName?.trim() || environmentNameFromSlug(environmentSlug);
-  const environmentType =
-    data.environmentType ?? (environmentSlug === "production" ? "production" : "development");
+  const environmentType = normalizeEnvironment(
+    data.environmentType ?? (environmentSlug === "production" ? "production" : "development"),
+  );
 
   const existing = (await repos.project.listByGroup(base.groupId)).find(
     (row) => row.environmentSlug === environmentSlug,

@@ -51,7 +51,7 @@ export const deployment = pgTable("deployment", {
   trigger: text("trigger").notNull().default("manual"),
 
   /* ── Build details ──────────────────────────────────────────────────── */
-  /** Environment: production | preview */
+  /** Environment: production | staging | development */
   environment: text("environment").notNull().default("production"),
   /** Detected or configured framework */
   framework: text("framework"),

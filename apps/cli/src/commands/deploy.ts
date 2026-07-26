@@ -19,6 +19,7 @@ import { readProjectLink } from "../lib/project-link";
 import { deployFolder } from "../lib/folder-deploy";
 import { streamDeploymentLogs } from "../lib/deploy-stream";
 import { isJsonMode, printJson, err, info } from "../lib/output";
+import { ENVIRONMENTS, normalizeEnvironment } from "@repo/core";
 
 /** Read a value from git, or undefined when not in a repo / git missing. */
 function git(args: string[]): string | undefined {
@@ -40,7 +41,7 @@ export const deployCommand = new Command("deploy")
   .option("--project <id>", "Project ID (defaults to the linked project in .openship/project.json)")
   .option("--branch <name>", "Git branch to deploy (defaults to the current branch)")
   .option("--commit <sha>", "Specific commit SHA (defaults to the latest commit on the branch)")
-  .option("--env <environment>", "Target environment: production | preview", "production")
+  .option("--env <environment>", "Target environment: production | staging | development", "production")
   .option("--force-all", "Rebuild every enabled service (skip smart per-service routing)")
   .option("--service-ids <ids>", "Comma-separated service IDs to deploy (smart routing)")
   .option("--smart-route", "Rebuild only services changed since the active deploy")
@@ -50,9 +51,11 @@ export const deployCommand = new Command("deploy")
   .action(async (opts) => {
     const link = readProjectLink();
 
-    const env: string = opts.env;
-    if (env !== "production" && env !== "preview") {
-      err(`Invalid --env "${env}". Must be "production" or "preview".`);
+    let env: string;
+    try {
+      env = normalizeEnvironment(opts.env);
+    } catch {
+      err(`Invalid --env "${opts.env}". Must be one of: ${ENVIRONMENTS.join(", ")}.`);
       process.exit(1);
     }
 

@@ -373,7 +373,7 @@ export const envVar = pgTable("env_var", {
   /** Encrypted value */
   value: text("value").notNull(),
   /** Environments where this var is active */
-  environment: text("environment").notNull().default("production"), // production | preview | development
+  environment: text("environment").notNull().default("production"), // production | staging | development
 
   /** Preview-only: don't include in production builds */
   isSecret: boolean("is_secret").notNull().default(false),

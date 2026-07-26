@@ -45,6 +45,7 @@ export const MonorepoSubAppFieldsSchema = {
 
 const EnvironmentEnum = Type.Union([
   Type.Literal("production"),
+  Type.Literal("staging"),
   Type.Literal("preview"),
   Type.Literal("development"),
 ]);

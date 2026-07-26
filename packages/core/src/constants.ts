@@ -21,7 +21,14 @@ export { STACK_IDS as FRAMEWORKS } from "./stacks";
 
 export const PRODUCTION_MODES = ["host", "static", "standalone"] as const;
 
-export const ENVIRONMENTS = ["production", "preview", "development"] as const;
+export {
+  ENVIRONMENTS,
+  LEGACY_ENVIRONMENTS,
+  isEnvironment,
+  normalizeEnvironment,
+  type EnvironmentInput,
+  type LegacyEnvironment,
+} from "./environments";
 
 export const DOMAIN_STATUSES = ["pending", "active", "failed", "removing"] as const;
 

@@ -23,6 +23,7 @@ import {
   STACKS,
   safeErrorMessage,
   getRuntimeImage,
+  normalizeEnvironment,
   isReleaseProvider,
   type StackId,
   type DeployTarget,
@@ -1402,7 +1403,7 @@ export async function triggerDeployment(
   });
 
   const branch = await resolveProjectBranch(ctx, project, data.branch);
-  const environment = data.environment ?? "production";
+  const environment = normalizeEnvironment(data.environment);
 
   // Skip an auto (webhook) deploy whose commit is already in-flight or live —
   // closes the App + repo-webhook double-deploy window. Manual/forceAll bypass.

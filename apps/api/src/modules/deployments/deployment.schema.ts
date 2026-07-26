@@ -15,7 +15,7 @@ export const DeploymentIdParam = Type.Object({
 export const ListDeploymentsQuery = Type.Object({
   projectId: Type.Optional(Type.String()),
   environment: Type.Optional(Type.Union([
-    Type.Literal("production"), Type.Literal("preview"),
+    Type.Literal("production"), Type.Literal("staging"), Type.Literal("preview"), Type.Literal("development"),
   ])),
   page: Type.Optional(Type.Number({ minimum: 1, default: 1 })),
   perPage: Type.Optional(Type.Number({ minimum: 1, maximum: 100, default: 20 })),
@@ -28,7 +28,7 @@ export const TriggerDeployBody = Type.Object({
   branch: Type.Optional(Type.String({ default: "main" })),
   commitSha: Type.Optional(Type.String()),
   environment: Type.Optional(Type.Union([
-    Type.Literal("production"), Type.Literal("preview"),
+    Type.Literal("production"), Type.Literal("staging"), Type.Literal("preview"), Type.Literal("development"),
   ])),
 });
 
@@ -94,7 +94,7 @@ export const BuildAccessBody = Type.Object({
     Type.String({ description: "Folder-upload session id — deploys the uploaded source instead of git." }),
   ),
   branch: Type.Optional(Type.String({ description: "Git branch (git-source projects)." })),
-  environment: Type.Optional(Type.String({ description: "production | preview (default production)." })),
+  environment: Type.Optional(Type.String({ description: "production | staging | development (preview accepted as a legacy alias)." })),
   envVars: Type.Optional(
     Type.Record(Type.String(), Type.String(), { description: "Runtime env vars { KEY: value }." }),
   ),

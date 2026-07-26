@@ -12,7 +12,7 @@ export type DeploymentStatus =
   | "failed"
   | "cancelled";
 
-export type Environment = "production" | "preview" | "development";
+export type { Environment } from "./environments";
 
 import type { StackId, Language } from "./stacks";
 

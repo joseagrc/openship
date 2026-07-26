@@ -171,7 +171,7 @@ export const projectsApi = {
     body: {
       environmentName: string;
       environmentSlug?: string;
-      environmentType?: "production" | "preview" | "development";
+      environmentType?: "production" | "staging" | "preview" | "development";
       gitBranch?: string;
       sourceMode?: "branch" | "manual";
     },

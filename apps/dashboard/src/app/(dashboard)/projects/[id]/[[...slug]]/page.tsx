@@ -234,7 +234,7 @@ const EnvironmentSwitcher = () => {
     try {
       const created = await createEnvironment({
         environmentName: branchToEnvironmentName(selectedBranch),
-        environmentType: selectedBranch === "main" || selectedBranch === "master" ? "production" : "preview",
+        environmentType: selectedBranch === "main" || selectedBranch === "master" ? "production" : "staging",
         gitBranch: selectedBranch,
         sourceMode: "branch",
       });

@@ -152,6 +152,7 @@ export const SetServiceEnvVarsBody = Type.Object(
   {
     environment: Type.Union([
       Type.Literal("production"),
+      Type.Literal("staging"),
       Type.Literal("preview"),
       Type.Literal("development"),
     ]),

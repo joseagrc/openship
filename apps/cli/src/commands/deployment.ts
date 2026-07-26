@@ -23,6 +23,7 @@ import { createInterface } from "node:readline";
 import { apiRequest, ApiError } from "../lib/api-client";
 import { readProjectLink } from "../lib/project-link";
 import { isJsonMode, printJson, printTable, ok, err } from "../lib/output";
+import { normalizeEnvironment } from "@repo/core";
 
 /** Wrap a subcommand action so ApiError surfaces cleanly and exits non-zero. */
 function run<A extends unknown[]>(fn: (...args: A) => Promise<void>) {
@@ -57,14 +58,14 @@ async function confirm(question: string): Promise<boolean> {
 const list = new Command("list")
   .description("List deployments (org-wide, or scoped to a project)")
   .option("--project <id>", "Scope to a project (defaults to the linked project)")
-  .option("--env <environment>", "Filter by environment: production | preview")
+  .option("--env <environment>", "Filter by environment: production | staging | development")
   .option("--limit <n>", "Max rows to fetch", "50")
   .action(
     run(async (opts) => {
       const projectId: string | undefined = opts.project || readProjectLink()?.projectId;
       const params = new URLSearchParams();
       if (projectId) params.set("projectId", projectId);
-      if (opts.env) params.set("environment", opts.env);
+      if (opts.env) params.set("environment", normalizeEnvironment(opts.env));
       params.set("perPage", String(Math.min(Number(opts.limit) || 50, 100)));
       const qs = params.toString();
       const res = await apiRequest<{ data?: Record<string, unknown>[] }>(
