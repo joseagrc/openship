@@ -21,7 +21,7 @@ import { runOrphanSweep } from "../projects/orphan-gc-schedule";
 import { runRetentionSweep } from "../backups/retention-prune";
 import { pruneAuditEvents } from "../audit/audit-prune";
 import { runReconcileSweep } from "../deployments/reconcile-schedule";
-import { verifyPendingDomains } from "../domains/domain.service";
+import { repairDomainRoutesAndSsl, verifyPendingDomains } from "../domains/domain.service";
 import { scanInstanceUpdates } from "../updates/updates.service";
 import { scanInstanceModules } from "../system/server-modules.service";
 import { runDueOnceJobs } from "./job-command";
@@ -103,6 +103,18 @@ export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
     run: async () => {
       const r = await verifyPendingDomains();
       return { verified: r.verified, failed: r.failed, pending: r.stillPending, total: r.total };
+    },
+  },
+  {
+    key: "domains:repair-routes",
+    label: "Domain route and SSL repair",
+    // Recovers verified custom domains left as pending/provisioning after an
+    // interrupted deploy, edge reload failure, or delayed certbot run.
+    defaultCron: "*/7 * * * *",
+    available: () => platform().target === "selfhosted",
+    run: async () => {
+      const r = await repairDomainRoutesAndSsl();
+      return { routedProjects: r.routedProjects, repaired: r.sslRepaired, failed: r.failed, total: r.total };
     },
   },
   {

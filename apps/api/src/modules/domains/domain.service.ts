@@ -19,16 +19,18 @@ import { NotFoundError, ConflictError, ValidationError, safeErrorMessage, normal
 import { platform, assertResourceInOrg } from "../../lib/controller-helpers";
 import { buildBackgroundContext, type RequestContext } from "../../lib/request-context";
 import { manageDomainSsl, installDomainCert, provisionDomainCertForVerify, verifyExistingCert } from "../../lib/domain-ssl";
-import { getRoutingBaseDomain } from "../../lib/routing-domains";
+import { buildServiceRouteDomains, getRoutingBaseDomain } from "../../lib/routing-domains";
 import { resolveRecords } from "../../lib/dns-resolver";
 import { resolveProjectServerHost } from "../../lib/server-target";
-import { reconcileProjectRoutes } from "../../lib/route-apply.service";
+import { reconcileProjectRoutes, type RouteRegister } from "../../lib/route-apply.service";
 import { generateToken } from "../../lib/domain-token";
 import { sshManager } from "../../lib/ssh-manager";
-import type { DeploymentMeta } from "../../lib/deployment-runtime";
+import { resolveDeploymentRuntime, type DeploymentMeta } from "../../lib/deployment-runtime";
 import { scanProxyRoutesWithExecutor } from "../migration/proxy-route-scan";
+import { reapplyProjectLiveRoutes } from "./project-route.service";
 import type { TAddDomainBody } from "./domain.schema";
 import type { CloudRuntime, CommandExecutor, ManualCert } from "@repo/adapters";
+import { buildUpstreamUrl, resolveRouteStrategy } from "../../lib/upstream-url";
 
 // ─── List ────────────────────────────────────────────────────────────────────
 
@@ -937,6 +939,148 @@ export async function verifyPendingDomains(opts?: {
         status: "failed",
         error: message,
       });
+    }
+  }
+
+  return result;
+}
+
+export interface RouteRepairResult {
+  routedProjects: number;
+  sslRepaired: number;
+  failed: number;
+  total: number;
+  details: Array<{ hostname: string; status: "repaired" | "failed" | "skipped"; error?: string }>;
+}
+
+async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean> {
+  if (!project.activeDeploymentId) return false;
+
+  const deployment = await repos.deployment.findById(project.activeDeploymentId);
+  if (!deployment) return false;
+
+  await reapplyProjectLiveRoutes(project, []);
+
+  const { runtime } = await resolveDeploymentRuntime(deployment);
+  const [services, serviceRows, domains] = await Promise.all([
+    repos.service.listByProject(project.id),
+    repos.service.listByDeployment(deployment.id),
+    repos.domain.listByProject(project.id),
+  ]);
+  const domainByHostname = new Map(domains.map((domain) => [domain.hostname.toLowerCase(), domain]));
+  const serviceRowById = new Map(serviceRows.map((row) => [row.serviceId, row]));
+  const strategy = resolveRouteStrategy(project.routeStrategy);
+  const registers: RouteRegister[] = [];
+
+  for (const service of services) {
+    if (!service.enabled || !service.exposed) continue;
+    const row = serviceRowById.get(service.id);
+    const routes = buildServiceRouteDomains({
+      project,
+      service,
+      runtimeName: runtime.name,
+      usesManagedRouting: true,
+      domainByHostname,
+    });
+
+    for (const route of routes) {
+      if (!route.targetPort) continue;
+      const targetUrl = buildUpstreamUrl({
+        strategy,
+        ip: row?.ip ?? undefined,
+        hostPort: row?.hostPort ?? undefined,
+        containerPort: route.targetPort,
+      });
+      if (!targetUrl) continue;
+      registers.push({
+        hostname: route.hostname,
+        targetUrl,
+        port: route.targetPort,
+        isCustomDomain: route.domainType === "custom",
+      });
+    }
+  }
+
+  if (registers.length > 0) {
+    await reconcileProjectRoutes(project, { deployment, registers });
+  }
+
+  return true;
+}
+
+/**
+ * Self-hosted repair sweep for verified custom domains whose DB state or edge
+ * state was left incomplete (`pending`, `provisioning`, `none`, `error`).
+ * Re-applies project/service vhosts first, then retries SSL provisioning.
+ */
+export async function repairDomainRoutesAndSsl(opts?: {
+  minAgeMinutes?: number;
+  limit?: number;
+}): Promise<RouteRepairResult> {
+  if (platform().target !== "selfhosted") {
+    return { routedProjects: 0, sslRepaired: 0, failed: 0, total: 0, details: [] };
+  }
+
+  const minAgeMinutes = opts?.minAgeMinutes ?? 5;
+  const limit = opts?.limit ?? 50;
+  const cutoff = new Date(Date.now() - minAgeMinutes * 60_000);
+  const candidates = (await repos.domain.findRouteRepairCandidates(cutoff, limit))
+    .filter((domain) => !!domain.projectId && !domain.externalIngress && !domain.manualSsl);
+
+  const result: RouteRepairResult = {
+    routedProjects: 0,
+    sslRepaired: 0,
+    failed: 0,
+    total: candidates.length,
+    details: [],
+  };
+
+  const projectIds = [...new Set(candidates.map((domain) => domain.projectId).filter((id): id is string => !!id))];
+  const projectById = new Map<string, Project>();
+  for (const projectId of projectIds) {
+    const project = await repos.project.findById(projectId);
+    if (project) projectById.set(projectId, project);
+  }
+
+  const routedProjectIds = new Set<string>();
+  for (const domain of candidates) {
+    const project = domain.projectId ? projectById.get(domain.projectId) : undefined;
+    if (!project) {
+      result.details.push({ hostname: domain.hostname, status: "skipped", error: "project not found" });
+      continue;
+    }
+
+    try {
+      if (!routedProjectIds.has(project.id)) {
+        if (await reapplyProjectAndServiceRoutes(project)) {
+          result.routedProjects++;
+        }
+        routedProjectIds.add(project.id);
+      }
+
+      if (domain.status !== "active") {
+        await repos.domain.markVerified(domain.id);
+      }
+      const ssl = await manageDomainSsl(domain.hostname, {
+        action: "provision",
+        projectId: project.id,
+      });
+      if (!ssl.verified) {
+        throw new Error(
+          ssl.reason === "missing"
+            ? "certificate was not created on the serving edge"
+            : "certificate could not be verified after provisioning",
+        );
+      }
+
+      result.sslRepaired++;
+      result.details.push({ hostname: domain.hostname, status: "repaired" });
+    } catch (err) {
+      const message = safeErrorMessage(err);
+      result.failed++;
+      result.details.push({ hostname: domain.hostname, status: "failed", error: message });
+      await repos.domain.updateSsl(domain.id, { sslStatus: "error" }).catch(() => {});
+      await repos.domain.update(domain.id, { lastVerifyError: message, lastCheckedAt: new Date() }).catch(() => {});
     }
   }
 
