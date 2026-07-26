@@ -20,6 +20,12 @@ describe("app catalog (JSON)", () => {
     }
   });
 
+  it("keeps code-server writable for the coder user", () => {
+    const codeServer = APP_TEMPLATES.find((app) => app.id === "code-server");
+    const service = codeServer?.services?.find((svc) => svc.name === "code-server");
+    expect(service?.volumes).toEqual(["code_server_home:/home/coder"]);
+  });
+
   it("rejects a malformed template (missing required fields)", () => {
     expect(isValidAppTemplate({ id: "x" })).toBe(false);
     expect(isValidAppTemplate(null)).toBe(false);
