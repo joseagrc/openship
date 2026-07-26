@@ -40,7 +40,8 @@ function LoginPageInner() {
   const searchParams = useSearchParams();
   const { toast } = useToast();
   const { t } = useI18n();
-  const { authMode, cloudAuthUrl, selfHosted } = useAuthContext();
+  const { authMode, cloudAuthUrl, selfHosted, oauthProviders } = useAuthContext();
+  const showOAuth = !selfHosted || oauthProviders.github || oauthProviders.google;
 
   const isDesktop = typeof window !== "undefined" && !!window.desktop?.isDesktop;
   const handleBack = isDesktop ? () => { void window.desktop?.reset?.(); } : undefined;
@@ -242,8 +243,7 @@ function LoginPageInner() {
         </Button>
       </form>
 
-      {/* OAuth only for SaaS (cloud-hosted) - hidden on self-hosted */}
-      {!selfHosted && <OAuthButtons callbackURL={postLoginUrl ?? "/"} />}
+      {showOAuth && <OAuthButtons callbackURL={postLoginUrl ?? "/"} providers={oauthProviders} />}
 
       {/* Public sign-up is a SaaS-only front door. On a self-hosted instance the
           only account is the CLI-created admin; everyone else joins via an

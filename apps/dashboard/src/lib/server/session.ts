@@ -112,6 +112,10 @@ export type DeploymentInfo = {
    *  is itself a deployable target, auto-registered as an isLocal server. */
   isServerHost?: boolean;
   authMode: "cloud" | "local" | "none";
+  oauthProviders?: {
+    github?: boolean;
+    google?: boolean;
+  };
   cloudAuthUrl: string;
   cloudApiUrl: string;
   machineName?: string;
