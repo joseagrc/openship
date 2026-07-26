@@ -9,7 +9,10 @@
 export const SOURCE_PROVIDERS = [
   "github",
   "gitlab",
+  "gitea",
+  "heptapod",
   "bitbucket",
+  "git",
   "local",
   "upload",
   "release",

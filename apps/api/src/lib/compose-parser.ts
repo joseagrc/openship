@@ -252,13 +252,21 @@ function parseCommand(command: unknown, env: Record<string, string>): string | u
  * Extract the extended compose keys that live under `service.advanced`. Returns
  * undefined when nothing was found so callers can omit the field entirely (keeps
  * it out of drift comparisons and the runtime payload). Grows as more keys are
- * supported; for A1 only `healthcheck` is read.
+ * supported.
  */
 function parseAdvanced(svc: Record<string, unknown>, env: Record<string, string>): ComposeAdvanced | undefined {
   const advanced: ComposeAdvanced = {};
 
   const healthcheck = parseHealthcheck(svc.healthcheck, env);
   if (healthcheck) advanced.healthcheck = healthcheck;
+
+  const deploy = svc.deploy && typeof svc.deploy === "object"
+    ? (svc.deploy as Record<string, unknown>)
+    : undefined;
+  const replicas = Number(deploy?.replicas);
+  if (Number.isInteger(replicas) && replicas > 1) {
+    advanced.replicas = Math.min(replicas, 10);
+  }
 
   return Object.keys(advanced).length > 0 ? advanced : undefined;
 }

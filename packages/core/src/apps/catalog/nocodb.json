@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "nocodb",
   "name": "NocoDB",
   "description": "Airtable-style spreadsheet UI over an SQL database. The first sign-up becomes the admin.",

@@ -28,6 +28,7 @@ import {
   FolderSessionBody,
   UpdateProjectBody,
   CreateProjectEnvironmentBody,
+  UpdateProjectEnvironmentBody,
   MergeEnvVarsBody,
   UpdateResourcesBody,
 } from "./project.schema";
@@ -166,6 +167,15 @@ r.post(
   },
   cloudProjectProxy,
   ctrl.createEnvironment,
+);
+r.patch(
+  "/:id/environments/:environmentId",
+  {
+    tag: "project:write",
+    mcp: { description: "Update a project environment's label, type, or deploy branch.", body: UpdateProjectEnvironmentBody },
+  },
+  cloudProjectProxy,
+  ctrl.updateEnvironment,
 );
 r.get("/:id/deletion-preview", { tag: "project:read", mcp: { description: "Preview what deleting this project would remove (read-only)." } }, cloudProjectProxy, ctrl.deletionPreview);
 

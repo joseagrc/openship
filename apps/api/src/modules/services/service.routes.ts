@@ -26,6 +26,7 @@ import {
   CreateServiceBody,
   SetServiceEnvVarsBody,
   UpdateServiceBody,
+  UpgradeServiceImageBody,
 } from "./service.schema";
 
 const r = secureRouter(new Hono(), {
@@ -131,6 +132,16 @@ r.post(
 r.post("/:serviceId/start", { tag: "project:service:write", mcp: { description: "Start this service's container." } }, cloudProjectProxy, ctrl.startContainer);
 r.post("/:serviceId/stop", { tag: "project:service:write", mcp: { description: "Stop this service's container." } }, cloudProjectProxy, ctrl.stopContainer);
 r.post("/:serviceId/restart", { tag: "project:service:write", mcp: { description: "Restart this service's container." } }, cloudProjectProxy, ctrl.restartContainer);
+r.post(
+  "/:serviceId/image/upgrade",
+  {
+    tag: "project:service:write",
+    mcp: { description: "Update an image-only service to a new Docker image and recreate its container.", body: UpgradeServiceImageBody },
+  },
+  cloudProjectProxy,
+  tbValidator("json", UpgradeServiceImageBody),
+  ctrl.upgradeImage,
+);
 
 /* ─── Service environment variables ─────────────────────────────────────── */
 r.get(

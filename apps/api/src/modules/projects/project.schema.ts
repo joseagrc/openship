@@ -45,6 +45,7 @@ export const MonorepoSubAppFieldsSchema = {
 
 const EnvironmentEnum = Type.Union([
   Type.Literal("production"),
+  Type.Literal("staging"),
   Type.Literal("preview"),
   Type.Literal("development"),
 ]);
@@ -189,6 +190,7 @@ export const CreateProjectBody = Type.Object({
   gitProvider: Type.Optional(Type.String({ default: "github" })),
   gitOwner: Type.Optional(Type.String({ maxLength: 100 })),
   gitRepo: Type.Optional(Type.String({ maxLength: 100 })),
+  gitUrl: Type.Optional(Type.String({ maxLength: 1000 })),
   gitBranch: Type.Optional(Type.String({ default: "main" })),
   installationId: Type.Optional(Type.Number()),
   // Release/dist source (gitProvider === "release")
@@ -315,6 +317,18 @@ export const CreateProjectEnvironmentBody = Type.Object({
   sourceMode: Type.Optional(EnvironmentSourceModeEnum),
 });
 
+export const UpdateProjectEnvironmentBody = Type.Object(
+  {
+    environmentName: Type.Optional(Type.String({ minLength: 1, maxLength: 80 })),
+    environmentSlug: Type.Optional(
+      Type.String({ minLength: 1, maxLength: 63, pattern: "^[a-z0-9]([a-z0-9-]*[a-z0-9])?$" }),
+    ),
+    environmentType: Type.Optional(EnvironmentEnum),
+    gitBranch: Type.Optional(Type.String({ minLength: 1, maxLength: 200 })),
+  },
+  { additionalProperties: false },
+);
+
 /**
  * MERGE of env vars — the per-variable editor's write. Only the named keys are
  * touched: `upserts` are inserted/updated, `deletes` are removed, every other
@@ -365,6 +379,7 @@ export type TCreateProjectBody = Static<typeof CreateProjectBody>;
 export type TUpdateProjectBody = Static<typeof UpdateProjectBody> & {
   rollbackWindow?: number | null;
 };
+export type TUpdateProjectEnvironmentBody = Static<typeof UpdateProjectEnvironmentBody>;
 export type TCreateProjectEnvironmentBody = Static<typeof CreateProjectEnvironmentBody>;
 export type TMergeEnvVarsBody = Static<typeof MergeEnvVarsBody>;
 export type TUpdateResourcesBody = Static<typeof UpdateResourcesBody>;

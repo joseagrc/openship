@@ -17,7 +17,7 @@ import {
   ConflictError,
   type AppConfigField,
 } from "@repo/core";
-import { getRuntimeCatalog, getTemplateForOrg, listOrgCustomApps } from "./catalog-source";
+import { getRuntimeCatalog, getRuntimeTemplate, getTemplateForOrg, listOrgCustomApps } from "./catalog-source";
 import { repos } from "@repo/db";
 import type { RequestContext } from "../../lib/request-context";
 import { createProject } from "../projects/project-crud.service";
@@ -50,6 +50,23 @@ function signHs256Jwt(secret: string, role: string): string {
   })}`;
   const sig = createHmac("sha256", secret).update(signingInput).digest("base64url");
   return `${signingInput}.${sig}`;
+}
+
+function parseContainerPort(port: string): number | undefined {
+  const parts = port.split(":").map((part) => part.trim()).filter(Boolean);
+  const value = parts[parts.length - 1];
+  if (!value) return undefined;
+  const [raw] = value.split("/");
+  const n = Number(raw);
+  return Number.isInteger(n) && n >= 1 && n <= 65535 ? n : undefined;
+}
+
+function primaryTemplatePort(template: NonNullable<ReturnType<typeof getRuntimeTemplate>>): number | undefined {
+  const primary =
+    (template.services ?? []).find((svc) => svc.exposed) ?? (template.services ?? [])[0];
+  if (!primary) return undefined;
+  if (primary.exposedPort != null) return primary.exposedPort;
+  return (primary.ports ?? []).map(parseContainerPort).find((port) => port != null);
 }
 
 /**
@@ -134,6 +151,10 @@ export async function installApp(
     return { kind: "flow", flowHref: template.flowHref ?? "/" };
   }
 
+  if (!template.services || template.services.length === 0) {
+    throw new Error("app-template-has-no-services");
+  }
+
   const baseName = input.name?.trim() || template.name;
 
   // Re-opening a same-named, not-yet-deployed draft returns it (so the wizard's
@@ -163,6 +184,7 @@ export async function installApp(
           framework: template.framework ?? "docker-compose",
           projectType: "services",
           hasBuild: false,
+          port: primaryTemplatePort(template),
           isApp: true,
           appTemplateId: template.id,
         },

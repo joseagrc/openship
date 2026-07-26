@@ -24,6 +24,7 @@ export {
   setBranch,
   listProjectEnvironments,
   createProjectEnvironment,
+  updateProjectEnvironment,
   updateOptions,
   listProjectDeployments,
   getLatestDeploymentSession,

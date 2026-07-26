@@ -1,10 +1,11 @@
 import { api } from "./client";
 import { endpoints } from "./endpoints";
-import type { StackId, ComposeAdvanced, RoutingConfig } from "@repo/core";
+import type { StackId, ComposeAdvanced, GitProvider, RoutingConfig } from "@repo/core";
 import type { CloudResourceTier, CloudResourceCustom, PublicEndpoint, PortCheckUI, OutputCheckUI } from "@/context/deployment/types";
 
 export type PrepareProjectSource =
   | { source?: "github"; owner: string; repo: string; branch?: string; force?: string | boolean }
+  | { source: "git"; url: string; branch?: string; provider?: GitProvider | string }
   | { source: "local"; path: string };
 
 export interface PrepareComposeService {
@@ -97,6 +98,7 @@ export interface PrepareProjectResponse extends PrepareAppConfig {
     selected_branch?: string;
     clone_url?: string;
     html_url?: string;
+    provider?: GitProvider;
     branches?: Array<{ name: string }>;
   };
   singleAppCandidate?: PrepareSingleAppCandidate;

@@ -102,7 +102,7 @@ export const project = pgTable(
 
     /* ── Git source ─────────────────────────────────────────────────────── */
     /**
-     * Source discriminator: "github" | "gitlab" | "bitbucket" | "local" | "upload" | "release".
+     * Source discriminator: "github" | "gitlab" | "gitea" | "heptapod" | "bitbucket" | "git" | "local" | "upload" | "release".
      * (Free-text; canonical set = SOURCE_PROVIDERS in @repo/core.)
      *   - "local"  → folder on a filesystem the API can read (desktop/self-hosted),
      *                path in `localPath`.
@@ -382,7 +382,7 @@ export const envVar = pgTable("env_var", {
   /** Encrypted value */
   value: text("value").notNull(),
   /** Environments where this var is active */
-  environment: text("environment").notNull().default("production"), // production | preview | development
+  environment: text("environment").notNull().default("production"), // production | staging | development
 
   /** Preview-only: don't include in production builds */
   isSecret: boolean("is_secret").notNull().default(false),

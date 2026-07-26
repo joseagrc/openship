@@ -58,7 +58,7 @@ import { resolveServicePort } from "./domain-helpers";
 import { buildCompositeRegistration, buildDomainFanoutRegistrations } from "./composite-route";
 import { serviceKind } from "./project-services";
 import { buildUpstreamUrl, resolveRouteStrategy } from "../../../lib/upstream-url";
-import { withLoopbackPublish } from "../../../lib/loopback-publish";
+import { specContainerPort, withLoopbackPublish } from "../../../lib/loopback-publish";
 
 export interface ComposeDeployResult {
   /** `reconciling` when at least one service's outcome is UNKNOWN because the
@@ -166,6 +166,39 @@ function hostPublishedPorts(service: Service): number[] {
     if (Number.isFinite(host)) out.push(host);
   }
   return out;
+}
+
+function declaredContainerPorts(service: Service): number[] {
+  const seen = new Set<number>();
+  for (const spec of (service.ports as string[] | null) ?? []) {
+    const port = specContainerPort(String(spec));
+    if (port) seen.add(port);
+  }
+  return [...seen];
+}
+
+function resolveRoutedContainerPort(service: Service, targetPort: number | undefined): number | undefined {
+  if (targetPort === undefined) return undefined;
+  const declared = declaredContainerPorts(service);
+  if (declared.length === 1 && !declared.includes(targetPort)) return declared[0];
+  return targetPort;
+}
+
+async function dockerPublishedHostPorts(
+  runtime: MultiServiceRuntimeAdapter,
+  allowedContainerIds: Set<string> = new Set(),
+): Promise<Set<number>> {
+  if (!(runtime instanceof DockerRuntime)) return new Set();
+  const ports = new Set<number>();
+  const containers = await runtime.listAllContainers().catch(() => []);
+  for (const container of containers) {
+    if (allowedContainerIds.has(container.id)) continue;
+    for (const port of container.ports) {
+      if (port.type !== "tcp" || !port.publicPort) continue;
+      ports.add(port.publicPort);
+    }
+  }
+  return ports;
 }
 
 /**
@@ -639,9 +672,25 @@ export async function deployComposeServices(
 
   // loopback-port routing (compose): host ports pinned this deploy, so two
   // services in the same pass never collide on an allocation. Seed with every
-  // previous service's port so a fresh allocation never lands on one that a
-  // later service is about to reuse.
+  // active Openship-pinned service port in this org, not only this project's
+  // previous deployment: when the API itself runs in Docker, the generic socket
+  // scan sees the API container's network namespace and can miss host-published
+  // loopback ports owned by sibling app containers.
   const usedHostPorts = new Set<number>();
+  const orgProjects = await repos.project
+    .listByOrganization(project.organizationId, { perPage: 1000 })
+    .then((r) => r.rows)
+    .catch(() => [] as Project[]);
+  for (const p of orgProjects) {
+    if (p.hostPort) usedHostPorts.add(p.hostPort);
+    if (!p.activeDeploymentId || p.id === project.id) continue;
+    const activeServiceDeps = await repos.service
+      .listByDeployment(p.activeDeploymentId)
+      .catch(() => []);
+    for (const depSvc of activeServiceDeps) {
+      if (depSvc.hostPort) usedHostPorts.add(depSvc.hostPort);
+    }
+  }
   for (const prev of previousByServiceId.values()) {
     if (prev.hostPort) usedHostPorts.add(prev.hostPort);
   }
@@ -880,6 +929,14 @@ export async function deployComposeServices(
         { serviceName: svc.name },
       );
     }
+    const requestedReplicas = Number((svc.advanced as ComposeAdvanced | null)?.replicas ?? 1);
+    if (requestedReplicas > 1) {
+      logger.log(
+        `Service "${svc.name}": ${requestedReplicas} replicas requested; current runtime deploys one workload until balanced replicas are enabled.\n`,
+        "warn",
+        { serviceName: svc.name },
+      );
+    }
 
     const serviceRuntimeConfig = createServiceRuntimeConfig({
       project,
@@ -982,7 +1039,7 @@ export async function deployComposeServices(
     // for direct access are preserved. Cloud handles exposure itself; bare/no-
     // executor can't publish → skip (route falls back to container-IP/loopback).
     const composeRouteStrategy = resolveRouteStrategy(project.routeStrategy);
-    const routedContainerPort = proxyRoutes[0]?.targetPort;
+    const routedContainerPort = resolveRoutedContainerPort(svc, proxyRoutes[0]?.targetPort);
     let servicePinnedHostPort: number | undefined;
     if (
       composeRouteStrategy === "loopback-port" &&
@@ -990,9 +1047,17 @@ export async function deployComposeServices(
       routedContainerPort !== undefined &&
       opts?.executor
     ) {
-      servicePinnedHostPort =
-        previousByServiceId.get(svc.id)?.hostPort ??
-        (await allocateHostPort(opts.executor, { avoid: usedHostPorts }));
+      const previous = previousByServiceId.get(svc.id);
+      const allowedLiveContainers = new Set<string>(
+        previous?.containerId ? [previous.containerId] : [],
+      );
+      const liveHostPorts = await dockerPublishedHostPorts(runtime, allowedLiveContainers);
+      const avoid = new Set([...usedHostPorts, ...liveHostPorts]);
+      if (previous?.hostPort) avoid.delete(previous.hostPort);
+      servicePinnedHostPort = await allocateHostPort(opts.executor, {
+        preferred: previous?.hostPort ?? undefined,
+        avoid,
+      });
       usedHostPorts.add(servicePinnedHostPort);
       serviceRuntimeConfig.ports = withLoopbackPublish(
         serviceRuntimeConfig.ports,

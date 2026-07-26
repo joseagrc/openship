@@ -163,9 +163,9 @@
     "manageGithubSettings": "gestionar GitHub en Ajustes"
   },
   "urlImport": {
-    "invalidUrl": "Introduce una URL válida de repositorio de GitHub",
+    "invalidUrl": "Introduce una URL válida de repositorio Git",
     "title": "Importar desde URL de Git",
-    "description": "Pega la URL de un repositorio público para importarlo. No requiere conexión con GitHub.",
+    "description": "Pega una URL de repositorio Git para importarlo. Los repositorios públicos no requieren conexión con el proveedor.",
     "importButton": "Importar repositorio"
   }
 }

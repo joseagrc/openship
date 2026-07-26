@@ -107,6 +107,7 @@ r.delete("/servers/:id", { tag: "server:admin" }, serversCtrl.deleteServer);
 r.get("/servers/:id/rate-limit", { tag: "server:read" }, rateLimit.getRateLimit);
 r.patch("/servers/:id/rate-limit", { tag: "server:write" }, rateLimit.updateRateLimit);
 r.post("/servers/:id/ports/scan", { tag: "server:read", readOnly: true }, serverCheck.scanExposedPorts);
+r.post("/servers/:id/repair", { tag: "server:admin" }, serverCheck.repairServerComponent);
 
 // ── Native-module versioning + migration (OpenResty, …). The `:id` server is
 //    the permission resource; handlers hard-guard cloud + org-scope. ──
@@ -188,4 +189,3 @@ r.use(
 r.post("/data-transfer/import", { tag: "settings:admin" }, requireRole("owner"), dataTransfer.importInstanceHandler);
 
 export const systemRoutes = r.hono;
-

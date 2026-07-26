@@ -1,5 +1,6 @@
 # ─── Build stage ────────────────────────────────────────
-FROM oven/bun:latest AS builder
+# Pinned to .bun-version (1.3.3) for reproducible source builds.
+FROM oven/bun:1.3.3 AS builder
 WORKDIR /app
 
 COPY package.json bun.lock pnpm-workspace.yaml ./
@@ -8,7 +9,9 @@ COPY packages/ ./packages/
 COPY apps/ ./apps/
 
 ENV NEXT_TELEMETRY_DISABLED=1
-RUN bun install && cd apps/web && bun run build
+RUN --mount=type=cache,target=/root/.bun/install/cache \
+    bun install --frozen-lockfile \
+ && cd apps/web && bun run build
 
 # ─── Production stage ──────────────────────────────────
 FROM node:22-alpine AS runner

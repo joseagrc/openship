@@ -52,7 +52,7 @@ vi.mock("@repo/adapters", async (importOriginal) => {
   return { ...actual, createHostExecutor: () => hostExec.current };
 });
 
-import { reuseServerCertForDomain } from "../../../src/modules/domains/domain.service";
+import { listDomains, reuseServerCertForDomain } from "../../../src/modules/domains/domain.service";
 
 /** Fake executor: `exists` answers the container markers from `container`, and
  *  file existence from `files`; `readFile` returns file contents or throws. */
@@ -188,5 +188,31 @@ describe("reuseServerCertForDomain", () => {
 
     expect(ok).toBe(true);
     expect(sslMocks.installDomainCert).toHaveBeenCalled();
+  });
+});
+
+describe("listDomains", () => {
+  it("repairs pending/provisioning self-hosted domains when a valid cert already exists", async () => {
+    sslMocks.verifyExistingCert.mockResolvedValue({
+      verified: true,
+      issuer: "certbot",
+      expiresAt: "2027-01-01T00:00:00.000Z",
+    });
+    domainRepo.listByProject
+      .mockResolvedValueOnce([{ ...domainRow, status: "pending", sslStatus: "provisioning" }])
+      .mockResolvedValueOnce([{ ...domainRow, verified: true, status: "active", sslStatus: "active" }]);
+
+    const rows = await listDomains(ctx, "proj_1");
+
+    expect(rows[0]?.status).toBe("active");
+    expect(sslMocks.verifyExistingCert).toHaveBeenCalledWith(
+      HOST,
+      expect.objectContaining({ projectId: "proj_1" }),
+    );
+    expect(domainRepo.markVerified).toHaveBeenCalledWith("dom_1");
+    expect(domainRepo.updateSsl).toHaveBeenCalledWith(
+      "dom_1",
+      expect.objectContaining({ sslStatus: "active", sslIssuer: "certbot" }),
+    );
   });
 });

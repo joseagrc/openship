@@ -87,12 +87,14 @@ services:
     # with the fixed internal port + in-cluster service DNS (compose
     # `environment` wins over `env_file`).
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       PORT: "${API_PORT:-4000}"
       DATABASE_URL: postgresql://${POSTGRES_USER:-openship}:${POSTGRES_PASSWORD:-openship}@postgres:5432/${POSTGRES_DB:-openship}
       REDIS_URL: redis://redis:6379
+      OPENSHIP_APP_CATALOG_REMOTE: "${OPENSHIP_APP_CATALOG_REMOTE:-false}"
     depends_on:
       postgres:
         condition: service_healthy
@@ -114,7 +116,8 @@ services:
     ports:
       - "${OPENSHIP_BIND_ADDR:-0.0.0.0}:${DASHBOARD_PORT:-3001}:${DASHBOARD_PORT:-3001}"
     env_file:
-      - .env
+      - path: .env
+        required: false
     environment:
       NODE_ENV: production
       PORT: "${DASHBOARD_PORT:-3001}"

@@ -1,5 +1,6 @@
 /**
- * Prepare service - resolves project info from a source (GitHub or local path).
+ * Prepare service - resolves project info from a source (GitHub, generic Git,
+ * or local path).
  *
  * Pure introspection: reads files, detects stack, returns a unified shape.
  * No database writes, no deployment logic.
@@ -24,6 +25,7 @@ import {
 import {
   parseDeploymentMetadata,
   parseOpenshipConfigJson,
+  type GitProvider,
   METADATA_FILES,
   type ProjectType,
   type RoutingConfig,
@@ -62,6 +64,7 @@ export type Source =
        *  github resolver throws when it's missing. */
       ctx?: RequestContext;
     }
+  | { source: "git"; url: string; branch?: string; provider?: string }
   | { source: "local"; path: string };
 
 export interface ProjectInfo {
@@ -74,6 +77,7 @@ export interface ProjectInfo {
     selected_branch?: string;
     clone_url?: string;
     html_url?: string;
+    provider?: GitProvider;
     branches?: { name: string }[];
   };
   stack: StackResult["stack"];
@@ -456,6 +460,14 @@ export async function resolveProjectInfo(input: Source): Promise<ProjectInfo> {
     return resolveFromGitHub(input.ctx, input.owner, input.repo, input.branch);
   }
 
+  if (input.source === "git") {
+    if (env.CLOUD_MODE) {
+      throw new Error("Generic Git URL resolution is not available in cloud mode");
+    }
+    const { resolveFromGitUrl } = await import("./git-source");
+    return resolveFromGitUrl(input.url, input.branch, input.provider);
+  }
+
   if (env.CLOUD_MODE) {
     throw new Error("Local project resolution is not available in cloud mode");
   }
@@ -525,6 +537,7 @@ function toProjectInfo(
     selected_branch?: string;
     clone_url?: string;
     html_url?: string;
+    provider?: GitProvider;
     branches?: { name: string }[];
   },
   projectRoot: ProjectRootSnapshot,
@@ -564,6 +577,7 @@ function toProjectInfo(
       selected_branch: selectedBranch || repo.default_branch,
       clone_url: repo.clone_url,
       html_url: repo.html_url,
+      provider: repo.provider,
       branches: repo.branches,
     },
     stack: stack.stack,

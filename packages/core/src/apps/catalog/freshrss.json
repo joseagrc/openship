@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "freshrss",
   "name": "FreshRSS",
   "description": "Self-hosted RSS and Atom feed reader with a first-run setup wizard.",

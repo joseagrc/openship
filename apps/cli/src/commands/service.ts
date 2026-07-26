@@ -17,6 +17,7 @@ import { apiRequest, ApiError, paginate } from "../lib/api-client";
 import { sseRequest } from "../lib/sse";
 import { getToken } from "../lib/config";
 import { isJsonMode, printJson, printTable, ok, err, info } from "../lib/output";
+import { ENVIRONMENTS, normalizeEnvironment } from "@repo/core";
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -522,13 +523,13 @@ const envCmd = new Command("env").description("Read and write a service's enviro
 const envGetCmd = stackCommand("get")
   .description("List a service's environment variables (secrets masked)")
   .argument("<service>", "Service name or id")
-  .option("-e, --env <environment>", "Environment: production | preview | development")
+  .option("-e, --env <environment>", "Environment: production | staging | development")
   .action(async (service: string, opts) => {
     requireAuth();
     try {
       const projectId = await resolveProject(opts.project);
       const svc = await resolveService(projectId, service);
-      const qs = opts.env ? `?environment=${encodeURIComponent(opts.env)}` : "";
+      const qs = opts.env ? `?environment=${encodeURIComponent(normalizeEnvironment(opts.env))}` : "";
       const res = await apiRequest<{ vars: Record<string, unknown>[] }>(
         `/projects/${projectId}/services/${svc.id}/env${qs}`,
       );
@@ -555,7 +556,7 @@ const envSetCmd = stackCommand("set")
   .description("Set a service's environment variables for one environment")
   .argument("<service>", "Service name or id")
   .argument("<pairs...>", "KEY=VALUE pairs")
-  .option("-e, --env <environment>", "Environment: production | preview | development", "production")
+  .option("-e, --env <environment>", "Environment: production | staging | development", "production")
   .option("--secret", "Mark the provided variables as secret")
   .option(
     "--replace",
@@ -566,7 +567,14 @@ const envSetCmd = stackCommand("set")
     try {
       const projectId = await resolveProject(opts.project);
       const svc = await resolveService(projectId, service);
-      const environment: string = opts.env;
+      let environment: string;
+      try {
+        environment = normalizeEnvironment(opts.env);
+      } catch {
+        err(`  environment must be one of: ${ENVIRONMENTS.join(", ")}`);
+        process.exitCode = 1;
+        return;
+      }
       const desired = parsePairs(pairs);
       const isSecret = Boolean(opts.secret);
 

@@ -1,4 +1,4 @@
-import { eq, and, lt, inArray } from "drizzle-orm";
+import { eq, and, lt, inArray, or } from "drizzle-orm";
 import { generateId } from "@repo/core";
 import type { Database } from "../client";
 import { domain, project } from "../schema";
@@ -277,6 +277,28 @@ export function createDomainRepo(db: Database) {
         );
       }
       const rows = await db.query.domain.findMany({ where: and(...conds) });
+      return rows.slice(0, limit);
+    },
+
+    /**
+     * Verified custom domains that still need routing/SSL reconciliation.
+     * Used by the self-hosted repair sweep for rows left as pending/provisioning
+     * after a deploy/verify interruption or an edge reload failure.
+     */
+    async findRouteRepairCandidates(beforeDate: Date, limit = 100): Promise<Domain[]> {
+      const rows = await db.query.domain.findMany({
+        where: and(
+          eq(domain.verified, true),
+          eq(domain.domainType, "custom"),
+          lt(domain.updatedAt, beforeDate),
+          or(
+            eq(domain.status, "pending"),
+            eq(domain.sslStatus, "none"),
+            eq(domain.sslStatus, "provisioning"),
+            eq(domain.sslStatus, "error"),
+          ),
+        ),
+      });
       return rows.slice(0, limit);
     },
 

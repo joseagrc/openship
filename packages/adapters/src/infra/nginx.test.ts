@@ -128,6 +128,35 @@ describe("NginxProvider config generation", () => {
     expect(certbot).not.toContain("--webroot");
   });
 
+  test("TLS re-registration fallback ignores the ACME challenge proxy", async () => {
+    const { nginx, files, conf } = setup({ certDomains: ["app.example.com"] });
+    files.set(`${SITES}/app-example-com.conf`, `# legacy config without route sidecar
+server {
+    listen 80;
+    server_name app.example.com;
+
+    location /.well-known/acme-challenge/ {
+        proxy_pass http://127.0.0.1:${ACME_HTTP01_PORT};
+        proxy_set_header Host $host;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:3009;
+        proxy_set_header Host $host;
+    }
+}
+`);
+
+    await nginx.provisionCert("app.example.com");
+
+    const c = conf("app-example-com")!;
+    expect(c).toContain("listen 443 ssl;");
+    expect(c).toContain(`proxy_pass http://127.0.0.1:${ACME_HTTP01_PORT};`);
+    expect(c).toContain("proxy_pass http://127.0.0.1:3009;");
+    const appProxy = c.lastIndexOf("proxy_pass http://127.0.0.1:3009;");
+    expect(appProxy).toBeGreaterThan(c.indexOf(`proxy_pass http://127.0.0.1:${ACME_HTTP01_PORT};`));
+  });
+
   test("webhook proxy adds the /_openship/hooks/ location", async () => {
     const { nginx, conf } = setup();
     await nginx.registerRoute({ ...PROXY, webhookProxy: "http://127.0.0.1:4000/api/webhooks/" });

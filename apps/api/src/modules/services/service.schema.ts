@@ -63,6 +63,7 @@ const HealthcheckSchema = Type.Object(
 const AdvancedSchema = Type.Object(
   {
     healthcheck: Type.Optional(HealthcheckSchema),
+    replicas: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
   },
   { additionalProperties: false },
 );
@@ -152,6 +153,7 @@ export const SetServiceEnvVarsBody = Type.Object(
   {
     environment: Type.Union([
       Type.Literal("production"),
+      Type.Literal("staging"),
       Type.Literal("preview"),
       Type.Literal("development"),
     ]),
@@ -170,6 +172,14 @@ export const SetServiceEnvVarsBody = Type.Object(
   { additionalProperties: false },
 );
 
+export const UpgradeServiceImageBody = Type.Object(
+  {
+    image: Type.String({ minLength: 1, maxLength: 500 }),
+  },
+  { additionalProperties: false },
+);
+
 export type TCreateServiceBody = Static<typeof CreateServiceBody>;
 export type TUpdateServiceBody = Static<typeof UpdateServiceBody>;
 export type TSetServiceEnvVarsBody = Static<typeof SetServiceEnvVarsBody>;
+export type TUpgradeServiceImageBody = Static<typeof UpgradeServiceImageBody>;

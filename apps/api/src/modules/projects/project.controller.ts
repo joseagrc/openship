@@ -23,7 +23,7 @@ import * as projectTeardown from "./project-teardown";
 import { getRouteStrategy } from "../settings/settings.service";
 import { checkProjectPorts } from "./port-check.service";
 import { checkProjectOutput } from "./output-check.service";
-import { AppError, safeErrorMessage } from "@repo/core";
+import { AppError, isGitHubProvider, safeErrorMessage } from "@repo/core";
 import type {
   TCreateProjectBody,
   TCreateProjectEnvironmentBody,
@@ -445,6 +445,36 @@ export async function createEnvironment(c: Context) {
     return c.json({ success: true, data }, 201);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create environment";
+    return c.json({ success: false, error: message }, 400);
+  }
+}
+
+export async function updateEnvironment(c: Context) {
+  const ctx = getRequestContext(c);
+  const { userId, organizationId } = ctx;
+  const id = param(c, "id");
+  const environmentId = param(c, "environmentId");
+  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  const body = await c.req.json();
+
+  try {
+    const data = await projectService.updateProjectEnvironment(id, environmentId, ctx, body);
+    audit.recordAsync(auditContextFrom(c, organizationId, userId), {
+      eventType: "project.updated",
+      resourceType: "project",
+      resourceId: environmentId,
+      after: {
+        action: "environment.updated",
+        environmentId: data.id,
+        environmentName: data.name,
+        environmentSlug: data.slug,
+        environmentType: data.type,
+        gitBranch: data.gitBranch,
+      },
+    });
+    return c.json({ success: true, data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update environment";
     return c.json({ success: false, error: message }, 400);
   }
 }
@@ -1299,10 +1329,10 @@ export async function getGitInfo(c: Context) {
     .map((d) => ({ hostname: d.hostname, ssl: d.sslStatus === "active" }));
 
   let branch = info.gitBranch ?? "";
-  if (!branch && info.gitOwner && info.gitRepo) {
+  if (!branch && isGitHubProvider(info.gitProvider) && info.gitOwner && info.gitRepo) {
     branch = await resolveDefaultBranch(ctx, info.gitOwner, info.gitRepo);
   }
-  const commits = branch
+  const commits = branch && isGitHubProvider(info.gitProvider)
     ? await getRecentCommits(ctx, info.gitOwner, info.gitRepo, branch, 10)
     : [];
 
@@ -1339,7 +1369,7 @@ export async function listBranches(c: Context) {
   await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
   const info = await projectService.getGitInfo(id, organizationId);
 
-  if (!info.gitOwner || !info.gitRepo) {
+  if (!isGitHubProvider(info.gitProvider) || !info.gitOwner || !info.gitRepo) {
     return c.json({ success: false, error: "No repository connected" }, 400);
   }
 
@@ -1448,7 +1478,7 @@ export async function setAutoDeploy(c: Context) {
   const owner = project.gitOwner;
   const repo = project.gitRepo;
 
-  if (!owner || !repo) {
+  if (!isGitHubProvider(project.gitProvider) || !owner || !repo) {
     return c.json({ success: false, error: "No repository linked" }, 400);
   }
 
@@ -1725,7 +1755,7 @@ export async function setBranch(c: Context) {
   await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
   const { branch } = await c.req.json<{ branch: string }>();
   if (!branch) return c.json({ error: "branch is required" }, 400);
-  const result = await projectService.setBranch(id, branch, organizationId);
+  const result = await projectService.setBranch(id, branch, ctx);
   audit.recordAsync(auditContextFrom(c, organizationId, userId), {
     eventType: "project.updated",
     resourceType: "project",

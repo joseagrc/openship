@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "vaultwarden",
   "name": "Vaultwarden",
   "description": "Lightweight self-hosted password manager (Bitwarden-compatible).",

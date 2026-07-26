@@ -9,7 +9,7 @@ import type { Service } from "@/lib/api/services";
 import { ApiError, getApiErrorMessage } from "@/lib/api/client";
 import { settingsApi } from "@/lib/api/settings";
 import type { BuildMode } from "@/lib/api/settings";
-import { STACKS, getBuildImage, type StackDefinition, type StackId } from "@repo/core";
+import { STACKS, getBuildImage, parseGitRepositoryUrl, type StackDefinition, type StackId } from "@repo/core";
 import type { BuildStrategy, DeploymentConfig, DeploymentModeSnapshot, MonorepoAppConfig, MonorepoWorkspaceConfig, PublicEndpoint } from "./types";
 import {
   DEFAULT_CONFIG,
@@ -34,6 +34,8 @@ interface PreparedConfigArgs {
   branch: string;
   branches: string[];
   projectId?: string;
+  gitProvider?: string;
+  gitUrl?: string;
   localPath?: string;
   uploadSessionId?: string;
 }
@@ -614,6 +616,8 @@ export function useDeploymentConfig() {
         projectId,
         repo: repoName,
         owner,
+        gitProvider: args.gitProvider,
+        gitUrl: args.gitUrl,
         localPath,
         uploadSessionId,
         projectName: project?.name || repoName,
@@ -796,6 +800,68 @@ export function useDeploymentConfig() {
         return {
           success: false,
           error: errorMessage,
+          errorType: err instanceof ApiError ? "api_error" : "network_error",
+        };
+      }
+    },
+    [buildPreparedConfig],
+  );
+
+  const initializeFromGitUrl = useCallback(
+    async (
+      url: string,
+      context?: { branch?: string; projectId?: string; provider?: string },
+    ): Promise<{ success: boolean; error?: string; errorType?: string }> => {
+      try {
+        let project: PersistedProject = null;
+        if (context?.projectId) {
+          const projectResponse = await projectsApi.getInfo(context.projectId);
+          project = projectResponse?.data?.project ?? projectResponse?.project ?? null;
+        }
+
+        const sourceUrl = project?.gitUrl || url;
+        const requestedBranch = (project?.gitBranch || context?.branch || "").trim() || undefined;
+        const response = await deployApi.prepare({
+          source: "git",
+          url: sourceUrl,
+          provider: project?.gitProvider || context?.provider,
+          branch: requestedBranch,
+        });
+
+        if (response?.error) {
+          return { success: false, error: response.error, errorType: "api_error" };
+        }
+
+        const repoName = response.repository.name || "repository";
+        const selectedBranch =
+          requestedBranch ||
+          response.repository.selected_branch ||
+          response.repository.default_branch ||
+          "";
+        const branches = response.repository.branches?.map((b: any) => b.name) || [];
+        const branchOptions =
+          selectedBranch && !branches.includes(selectedBranch)
+            ? [selectedBranch, ...branches]
+            : branches;
+        const parsed = parseGitRepositoryUrl(sourceUrl, response.repository.provider);
+
+        setConfig((prev) => buildPreparedConfig(prev, {
+          response,
+          project,
+          repoName,
+          owner: response.repository.owner?.login || "git",
+          branch: selectedBranch,
+          branches: branchOptions,
+          projectId: context?.projectId,
+          gitProvider: response.repository.provider || parsed?.provider || "git",
+          gitUrl: response.repository.clone_url || url,
+        }));
+
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: getApiErrorMessage(err, "Failed to fetch Git repository data"),
           errorType: err instanceof ApiError ? "api_error" : "network_error",
         };
       }
@@ -1007,6 +1073,7 @@ export function useDeploymentConfig() {
     updateOptions,
     initializeFromRepo,
     initializeFromLocal,
+    initializeFromGitUrl,
     initializeFromUpload,
     initializeFromProject,
   };

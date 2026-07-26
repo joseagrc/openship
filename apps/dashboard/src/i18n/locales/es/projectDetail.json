@@ -169,6 +169,7 @@
       "restart": "Reiniciar",
       "start": "Iniciar",
       "starting": "Iniciando…",
+      "upgradingImage": "Actualizando imagen…",
       "enableAndStart": "Habilitar e iniciar",
       "redeploying": "Redesplegando…",
       "redeploy": "Redesplegar",
@@ -200,6 +201,8 @@
         "enableBeforeRedeploy": "Habilita el servicio antes de redesplegarlo",
         "redeployFailed": "El redespliegue falló",
         "stillStarting": "Aún se está iniciando; revisa los registros para ver el progreso",
+        "imageUpgraded": "Imagen actualizada",
+        "imageUpgradeFailed": "No se pudo actualizar la imagen",
         "serviceUpdated": "Servicio actualizado",
         "updateFailed": "No se pudo actualizar el servicio",
         "serviceDeleted": "Servicio eliminado",
@@ -225,6 +228,8 @@
       "command": "Comando",
       "restartPolicy": "Política de reinicio",
       "volumes": "Volúmenes",
+      "replicas": "Réplicas",
+      "replicasHint": "Más de 1 réplica requiere puertos internos; los mapeos host:contenedor se guardan como puerto interno.",
       "healthcheck": "Comprobación de estado",
       "healthcheckHint": "Comando de prueba (formato de shell). Déjalo vacío para usar la comprobación predeterminada de la imagen.",
       "enabled": "Habilitado",
@@ -236,6 +241,9 @@
         "buildContextOrDockerfile": "Añade un contexto de compilación o una ruta de Dockerfile.",
         "rootDirectory": "Añade un directorio raíz (p. ej. apps/web).",
         "buildOrStart": "Añade al menos un comando de compilación o un comando de inicio.",
+        "replicas": "Las réplicas deben ser un número entero entre 1 y 10.",
+        "replicasNeedStateless": "Más de 1 réplica requiere un servicio stateless sin volúmenes.",
+        "replicasNeedUnpublishedPorts": "Más de 1 réplica requiere puertos internos, no mapeos fijos del host.",
         "saveFailed": "No se pudo guardar el servicio."
       }
     }
