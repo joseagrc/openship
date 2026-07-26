@@ -1,18 +1,17 @@
 name: Docker images
 
-# Publishes the official pull-based images (openship-api + openship-dashboard +
-# openship-edge) to GHCR. Deliberately SEPARATE from release.yml (the bun
-# binary / npm CLI / desktop installers / GitHub release) so image publishing
-# can be iterated + tested on its own.
+# Publishes the pull-based self-hosted images to GHCR:
+#   ghcr.io/<owner>/openship-api
+#   ghcr.io/<owner>/openship-dashboard
+#   ghcr.io/<owner>/openship-edge
 #
-# Triggers:
-#   • tag push v*.*.*      → real release: semver tags + :latest (RCs skip :latest)
-#   • main push            → continuous self-hosted images under :main and
-#                             :main-<commit>; does not move :latest
-#   • workflow_dispatch     → manual test: publish images ONLY under the given tag
-#                             (or the short SHA), and NEVER move :latest. Lets you
-#                             prerelease-test Docker without cutting a release or
-#                             touching the current :latest.
+# Recommended repository secrets:
+#   GHCR_USERNAME=joseagrc
+#   GHCR_TOKEN=<PAT with write:packages>
+#
+# If GHCR_TOKEN is absent, the workflow falls back to github.token. That works
+# only when the repository's Actions token is allowed to write the target GHCR
+# packages. Forks often need the explicit PAT secret.
 on:
   push:
     branches:
@@ -22,7 +21,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: "Image tag for a manual test (e.g. 0.0.0-rc.1). Blank → short SHA. Never moves :latest."
+        description: "Image tag for a manual test. Blank uses the short SHA. Never moves :latest."
         required: false
         type: string
 
@@ -35,102 +34,46 @@ permissions:
   packages: write
 
 env:
-  # Optional repo/org secrets:
-  #   GHCR_USERNAME=joseagrc
-  #   GHCR_TOKEN=<PAT with write:packages>
-  # If they are not set, the workflow falls back to GitHub's per-run token.
   GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.repository_owner }}
   GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
 
 jobs:
-  # Native per-arch builds (no QEMU — reuses the ubuntu-24.04-arm runner). Each
-  # arch is pushed to GHCR BY DIGEST; merge-images assembles the manifest lists.
   build-images:
-    name: Build ${{ matrix.image }} (${{ matrix.platform }})
-    runs-on: ${{ matrix.runner }}
+    name: Build and publish ${{ matrix.image }}
+    runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
       matrix:
-        image: [api, dashboard, edge]
-        platform: [amd64, arm64]
-        include:
-          - platform: amd64
-            runner: ubuntu-24.04
-          - platform: arm64
-            runner: ubuntu-24.04-arm
+        image:
+          - api
+          - dashboard
+          - edge
     steps:
       - name: Checkout
         uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
       - name: Normalize image namespace
         run: echo "IMAGE_NAMESPACE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
-      - name: Log in to GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ env.GHCR_USERNAME }}
-          password: ${{ env.GHCR_TOKEN }}
-
-      - name: Image labels
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}
-
-      - name: Build and push by digest
-        id: build
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: apps/${{ matrix.image }}/Dockerfile
-          platforms: linux/${{ matrix.platform }}
-          labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
-          cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
-          cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.platform }}
-
-      - name: Export digest
+      - name: Explain GHCR credentials
+        env:
+          HAS_GHCR_TOKEN: ${{ secrets.GHCR_TOKEN != '' }}
         run: |
-          set -euo pipefail
-          mkdir -p /tmp/digests
-          digest="${{ steps.build.outputs.digest }}"
-          touch "/tmp/digests/${digest#sha256:}"
+          if [ "$HAS_GHCR_TOKEN" != "true" ]; then
+            echo "::warning::GHCR_TOKEN is not configured. Falling back to github.token; if GHCR push is denied, add GHCR_USERNAME and GHCR_TOKEN repository secrets."
+          else
+            echo "Using GHCR_TOKEN repository secret for GHCR publishing."
+          fi
 
-      - name: Upload digest
-        uses: actions/upload-artifact@v7
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
         with:
-          name: digests-${{ matrix.image }}-${{ matrix.platform }}
-          path: /tmp/digests/*
-          if-no-files-found: error
-          retention-days: 1
-
-  merge-images:
-    name: Publish ${{ matrix.image }} (manifest)
-    needs: build-images
-    runs-on: ubuntu-24.04
-    strategy:
-      fail-fast: false
-      matrix:
-        image: [api, dashboard, edge]
-    steps:
-      - name: Download digests
-        uses: actions/download-artifact@v8
-        with:
-          pattern: digests-${{ matrix.image }}-*
-          path: /tmp/digests
-          merge-multiple: true
+          platforms: arm64
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-
-      - name: Normalize image namespace
-        run: echo "IMAGE_NAMESPACE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
 
       - name: Log in to GHCR
         uses: docker/login-action@v3
@@ -139,9 +82,6 @@ jobs:
           username: ${{ env.GHCR_USERNAME }}
           password: ${{ env.GHCR_TOKEN }}
 
-      # Tag push → semver + :latest (auto: RCs like v1.2.3-rc.1 skip :latest).
-      # main push → :main + :main-<sha>, never :latest.
-      # Manual dispatch → the input tag (or short SHA), and NEVER :latest.
       - name: Docker meta
         id: meta
         uses: docker/metadata-action@v5
@@ -152,24 +92,23 @@ jobs:
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{major}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=raw,value=main,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
-            type=raw,value=main-${{ github.sha }},enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+            type=sha,prefix=main-,format=short,enable=${{ github.event_name == 'push' && github.ref == 'refs/heads/main' }}
             type=raw,value=${{ github.event.inputs.tag }},enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag != '' }}
             type=sha,format=short,enable=${{ github.event_name == 'workflow_dispatch' && github.event.inputs.tag == '' }}
           flavor: |
             latest=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && 'auto' || 'false' }}
 
-      - name: Create manifest list + push
-        working-directory: /tmp/digests
-        env:
-          METADATA_JSON: ${{ steps.meta.outputs.json }}
-          SRC: ${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}
-        run: |
-          set -euo pipefail
-          docker buildx imagetools create \
-            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$METADATA_JSON") \
-            $(printf "${SRC}@sha256:%s " *)
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: apps/${{ matrix.image }}/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          labels: ${{ steps.meta.outputs.labels }}
+          tags: ${{ steps.meta.outputs.tags }}
+          push: true
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}
 
-      - name: Inspect
-        run: |
-          docker buildx imagetools inspect \
-            "${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}:${{ steps.meta.outputs.version }}" || true
+      - name: Inspect published image
+        run: docker buildx imagetools inspect "${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}:${{ steps.meta.outputs.version }}"
