@@ -193,14 +193,23 @@ describe("reuseServerCertForDomain", () => {
 
 describe("listDomains", () => {
   it("repairs pending/provisioning self-hosted domains when a valid cert already exists", async () => {
+    let storedDomain = {
+      ...domainRow,
+      status: "pending",
+      sslStatus: "provisioning",
+    };
+    domainRepo.listByProject.mockImplementation(async () => [storedDomain]);
+    domainRepo.markVerified.mockImplementation(async () => {
+      storedDomain = { ...storedDomain, verified: true, status: "active" };
+    });
+    domainRepo.updateSsl.mockImplementation(async (_id: string, patch: Record<string, unknown>) => {
+      storedDomain = { ...storedDomain, ...patch };
+    });
     sslMocks.verifyExistingCert.mockResolvedValue({
       verified: true,
       issuer: "certbot",
       expiresAt: "2027-01-01T00:00:00.000Z",
     });
-    domainRepo.listByProject
-      .mockResolvedValueOnce([{ ...domainRow, status: "pending", sslStatus: "provisioning" }])
-      .mockResolvedValueOnce([{ ...domainRow, verified: true, status: "active", sslStatus: "active" }]);
 
     const rows = await listDomains(ctx, "proj_1");
 

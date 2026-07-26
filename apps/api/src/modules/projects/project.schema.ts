@@ -280,7 +280,7 @@ export const CreateProjectBody = Type.Object({
   appTemplateId: Type.Optional(Type.String({ maxLength: 100 })),
 });
 
-export const UpdateProjectBody = Type.Partial(CreateProjectBody);
+export const UpdateProjectBody = Type.Partial(Type.Omit(CreateProjectBody, ["gitUrl"]));
 
 /**
  * POST /projects/ensure — CreateProjectBody plus an optional `projectId` to
