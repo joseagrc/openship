@@ -26,8 +26,18 @@ import { useI18n, interpolate } from "@/components/i18n-provider";
 import { useUpdates } from "./useUpdates";
 
 const SEVERITY = {
-  critical: { border: "border-danger-border", bg: "bg-danger-bg", fg: "text-danger", Icon: AlertTriangle },
-  recommended: { border: "border-warning-border", bg: "bg-warning-bg", fg: "text-warning", Icon: AlertCircle },
+  critical: {
+    border: "border-danger-border",
+    bg: "bg-danger-bg",
+    fg: "text-danger",
+    Icon: AlertTriangle,
+  },
+  recommended: {
+    border: "border-warning-border",
+    bg: "bg-warning-bg",
+    fg: "text-warning",
+    Icon: AlertCircle,
+  },
   info: { border: "border-primary/30", bg: "bg-primary/10", fg: "text-primary", Icon: Info },
 } as const;
 
@@ -58,6 +68,7 @@ export function UpdateCenter() {
     updatePhase,
     updateProgress,
     updateError,
+    updateSource,
   } = useUpdates();
   const { t } = useI18n();
   const w = t.widgets.updates;
@@ -69,7 +80,10 @@ export function UpdateCenter() {
   const updating = desktop && updatePhase !== "idle";
   const updatingVersion = state?.latestVersion ?? latest?.version ?? "";
   const pct = Math.round(Math.min(1, Math.max(0, updateProgress)) * 100);
-  const changelog = state?.latestChangelogUrl ?? "https://github.com/oblien/openship/releases";
+  const changelog =
+    state?.latestChangelogUrl ??
+    updateSource?.releasesUrl ??
+    "https://github.com/oblien/openship/releases";
 
   return (
     <>
@@ -83,7 +97,9 @@ export function UpdateCenter() {
                 <div className="min-w-0 flex-1">
                   <p className="text-[13.5px] font-semibold text-foreground">{w.updateFailed}</p>
                   {updateError && (
-                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">{updateError}</p>
+                    <p className="mt-0.5 truncate text-[12px] text-muted-foreground">
+                      {updateError}
+                    </p>
                   )}
                 </div>
                 <button
@@ -125,49 +141,61 @@ export function UpdateCenter() {
       )}
 
       {/* ── Advisory banner (critical/recommended/info) ─────────────── */}
-      {!updating && advisory && (() => {
-        const s = SEVERITY[advisory.severity as AdvisorySeverity];
-        const Icon = s.Icon;
-        return (
-          <div className="px-4 pt-4 sm:px-6 sm:pt-6">
-            <div className={`flex items-start gap-3 rounded-2xl border ${s.border} ${s.bg} px-4 py-3.5`}>
-              <div className={`mt-0.5 shrink-0 ${s.fg}`}>
-                <Icon className="size-5" />
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold uppercase tracking-wide ${s.fg}`}>{w.severity[advisory.severity as AdvisorySeverity]}</span>
-                  <span className="text-[14px] font-semibold text-foreground">{advisory.title}</span>
-                </div>
-                <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">{advisory.message}</p>
-                <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
-                  {advisory.action?.kind === "open-url" && advisory.action.url ? (
-                    <ExternalLinkBtn href={advisory.action.url}>{advisory.action.label}</ExternalLinkBtn>
-                  ) : advisory.action?.kind === "update" && desktop ? (
-                    <button
-                      type="button"
-                      onClick={beginUpdate}
-                      className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
-                    >
-                      <Download className="size-3.5" />
-                      {advisory.action.label}
-                    </button>
-                  ) : null}
-                  <ExternalLinkBtn href={changelog}>{w.viewChangelog}</ExternalLinkBtn>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => dismissAdvisory(advisory.id)}
-                aria-label={w.dismiss}
-                className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+      {!updating &&
+        advisory &&
+        (() => {
+          const s = SEVERITY[advisory.severity as AdvisorySeverity];
+          const Icon = s.Icon;
+          return (
+            <div className="px-4 pt-4 sm:px-6 sm:pt-6">
+              <div
+                className={`flex items-start gap-3 rounded-2xl border ${s.border} ${s.bg} px-4 py-3.5`}
               >
-                <X className="size-4" />
-              </button>
+                <div className={`mt-0.5 shrink-0 ${s.fg}`}>
+                  <Icon className="size-5" />
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2">
+                    <span className={`text-[11px] font-semibold uppercase tracking-wide ${s.fg}`}>
+                      {w.severity[advisory.severity as AdvisorySeverity]}
+                    </span>
+                    <span className="text-[14px] font-semibold text-foreground">
+                      {advisory.title}
+                    </span>
+                  </div>
+                  <p className="mt-0.5 text-[13px] leading-relaxed text-muted-foreground">
+                    {advisory.message}
+                  </p>
+                  <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1.5">
+                    {advisory.action?.kind === "open-url" && advisory.action.url ? (
+                      <ExternalLinkBtn href={advisory.action.url}>
+                        {advisory.action.label}
+                      </ExternalLinkBtn>
+                    ) : advisory.action?.kind === "update" && desktop ? (
+                      <button
+                        type="button"
+                        onClick={beginUpdate}
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90"
+                      >
+                        <Download className="size-3.5" />
+                        {advisory.action.label}
+                      </button>
+                    ) : null}
+                    <ExternalLinkBtn href={changelog}>{w.viewChangelog}</ExternalLinkBtn>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => dismissAdvisory(advisory.id)}
+                  aria-label={w.dismiss}
+                  className="shrink-0 rounded-lg p-1 text-muted-foreground transition-colors hover:bg-foreground/[0.06] hover:text-foreground"
+                >
+                  <X className="size-4" />
+                </button>
+              </div>
             </div>
-          </div>
-        );
-      })()}
+          );
+        })()}
 
       {/* A bare "newer version exists" no longer raises a banner — that's the
           nagging-every-release problem. It's surfaced quietly instead: the home
@@ -183,11 +211,11 @@ export function UpdateCenter() {
               <Sparkles className="size-4.5" />
             </div>
             <div className="min-w-0 flex-1">
-              <p className="text-[14px] font-semibold text-foreground">{interpolate(w.updatedTo, { version: whatsNewVersion })}</p>
+              <p className="text-[14px] font-semibold text-foreground">
+                {interpolate(w.updatedTo, { version: whatsNewVersion })}
+              </p>
               <p className="mt-0.5 text-[12.5px] leading-relaxed text-muted-foreground">
-                {latest?.version === whatsNewVersion && latest.notes
-                  ? w.seeChanges
-                  : w.onLatest}
+                {latest?.version === whatsNewVersion && latest.notes ? w.seeChanges : w.onLatest}
               </p>
               <div className="mt-2.5 flex items-center gap-3">
                 {latest?.notes && latest.version === whatsNewVersion && (
@@ -225,7 +253,9 @@ export function UpdateCenter() {
             onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between border-b border-border/50 px-5 py-4">
-              <h3 className="text-[15px] font-semibold text-foreground">{interpolate(w.whatsNewIn, { version: latest.version })}</h3>
+              <h3 className="text-[15px] font-semibold text-foreground">
+                {interpolate(w.whatsNewIn, { version: latest.version })}
+              </h3>
               <button
                 type="button"
                 onClick={() => setNotesOpen(false)}

@@ -71,23 +71,113 @@ export interface UpdateState {
   latestChangelogUrl: string;
 }
 
-export const GITHUB_REPO = "oblien/openship";
+export const DEFAULT_UPDATE_REPO = "oblien/openship";
+export const DEFAULT_UPDATE_BRANCH = "main";
+export const DEFAULT_IMAGE_REGISTRY = "ghcr.io/oblien";
+
+export type UpdateChannel = "release" | "docker" | "source";
+
+export interface UpdateSourceConfig {
+  /** GitHub owner/repo used for release lookup and pinned advisory manifests. */
+  repo: string;
+  /** Branch used by source installs and "view source" links. */
+  branch: string;
+  /** Preferred update mechanism for this install. */
+  channel: UpdateChannel;
+  /** Container registry namespace used by compose images. */
+  imageRegistry: string;
+  /** Running/pinned image or release version when known. */
+  version: string | null;
+  repoUrl: string;
+  releasesApiUrl: string;
+  releasesUrl: string;
+  changelogUrl: string;
+}
+
+/** Backwards-compatible public constant for callers/tests that import REPO. */
+export const GITHUB_REPO = DEFAULT_UPDATE_REPO;
+
+function cleanPathPart(input: string): string {
+  return input.trim().replace(/^\/+|\/+$/g, "");
+}
+
+export function normalizeGithubRepo(input?: string | null): string {
+  const raw = (input ?? "").trim();
+  if (!raw) return DEFAULT_UPDATE_REPO;
+
+  const withoutGit = raw.replace(/\.git$/i, "");
+  try {
+    const url = new URL(withoutGit);
+    if (url.hostname !== "github.com" && url.hostname !== "www.github.com")
+      return DEFAULT_UPDATE_REPO;
+    const parts = cleanPathPart(url.pathname).split("/");
+    return parts.length >= 2 && parts[0] && parts[1]
+      ? `${parts[0]}/${parts[1]}`
+      : DEFAULT_UPDATE_REPO;
+  } catch {
+    const parts = cleanPathPart(withoutGit).split("/");
+    return parts.length === 2 && parts[0] && parts[1]
+      ? `${parts[0]}/${parts[1]}`
+      : DEFAULT_UPDATE_REPO;
+  }
+}
+
+export function normalizeUpdateChannel(input?: string | null): UpdateChannel {
+  return input === "docker" || input === "source" || input === "release" ? input : "release";
+}
+
+export function githubRepoUrl(repo = DEFAULT_UPDATE_REPO): string {
+  return `https://github.com/${normalizeGithubRepo(repo)}`;
+}
 
 /** GitHub API: the latest published (non-prerelease) release. */
-export const RELEASES_LATEST_API = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+export function releasesLatestApi(repo = DEFAULT_UPDATE_REPO): string {
+  return `https://api.github.com/repos/${normalizeGithubRepo(repo)}/releases/latest`;
+}
+
+/** Backwards-compatible default latest-release endpoint. */
+export const RELEASES_LATEST_API = releasesLatestApi();
 
 /**
  * Raw advisory manifest URL, PINNED to a release tag. Because it's pinned to a
  * tag (not a branch), it only changes when a version is released — commits to
  * `main` are invisible to clients. Returns null for an empty tag.
  */
-export function advisoryManifestUrl(tag: string): string {
-  return `https://raw.githubusercontent.com/${GITHUB_REPO}/${encodeURIComponent(tag)}/release-advisories.json`;
+export function advisoryManifestUrl(tag: string, repo = DEFAULT_UPDATE_REPO): string {
+  return `https://raw.githubusercontent.com/${normalizeGithubRepo(repo)}/${encodeURIComponent(tag)}/release-advisories.json`;
 }
 
 /** Human-facing changelog link — a specific tag's notes, or all releases. */
-export function changelogUrl(tag?: string): string {
+export function changelogUrl(tag?: string, repo = DEFAULT_UPDATE_REPO): string {
+  const normalizedRepo = normalizeGithubRepo(repo);
   return tag
-    ? `https://github.com/${GITHUB_REPO}/releases/tag/${encodeURIComponent(tag)}`
-    : `https://github.com/${GITHUB_REPO}/releases`;
+    ? `https://github.com/${normalizedRepo}/releases/tag/${encodeURIComponent(tag)}`
+    : `https://github.com/${normalizedRepo}/releases`;
+}
+
+export function updateSourceConfig(
+  input?: Partial<{
+    repo: string | null;
+    branch: string | null;
+    channel: string | null;
+    imageRegistry: string | null;
+    version: string | null;
+  }>,
+): UpdateSourceConfig {
+  const repo = normalizeGithubRepo(input?.repo);
+  const branch = (input?.branch ?? "").trim() || DEFAULT_UPDATE_BRANCH;
+  const channel = normalizeUpdateChannel(input?.channel);
+  const imageRegistry = (input?.imageRegistry ?? "").trim() || DEFAULT_IMAGE_REGISTRY;
+  const version = (input?.version ?? "").trim() || null;
+  return {
+    repo,
+    branch,
+    channel,
+    imageRegistry,
+    version,
+    repoUrl: githubRepoUrl(repo),
+    releasesApiUrl: releasesLatestApi(repo),
+    releasesUrl: changelogUrl(undefined, repo),
+    changelogUrl: changelogUrl(undefined, repo),
+  };
 }

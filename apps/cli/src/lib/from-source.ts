@@ -19,11 +19,18 @@
 import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync } from "node:fs";
 import { join, resolve } from "node:path";
+import { normalizeGithubRepo } from "@repo/core";
 
 import { OS_DIR } from "./paths";
 
 export { OS_DIR };
 export const DEFAULT_REPO = "https://github.com/oblien/openship.git";
+
+export function defaultSourceRepo(): string {
+  const configured = process.env.OPENSHIP_REPO || process.env.OPENSHIP_UPDATE_REPO;
+  if (!configured) return DEFAULT_REPO;
+  return `https://github.com/${normalizeGithubRepo(configured)}.git`;
+}
 
 export interface FromSourceRun {
   /** release-dist/api — the API runs here via `bun run src/index.ts`. */
@@ -49,7 +56,12 @@ export function has(cmd: string): boolean {
 
 /** Run a command attached (stdio inherited so the operator sees build output),
  *  rejecting on a non-zero exit. */
-export function run(cmd: string, args: string[], cwd: string, env?: Record<string, string>): Promise<void> {
+export function run(
+  cmd: string,
+  args: string[],
+  cwd: string,
+  env?: Record<string, string>,
+): Promise<void> {
   return new Promise((res, rej) => {
     const child = spawn(cmd, args, {
       cwd,
@@ -112,7 +124,7 @@ export async function prepareFromSource(opts: {
       throw new Error("`git` is required to clone the source but wasn't found on PATH.");
     }
     ref = (opts.ref || "main").trim();
-    const repoUrl = opts.repo || DEFAULT_REPO;
+    const repoUrl = opts.repo || defaultSourceRepo();
     sourceDir = join(OS_DIR, "src");
     mkdirSync(OS_DIR, { recursive: true });
     if (!existsSync(join(sourceDir, ".git"))) {
@@ -141,12 +153,12 @@ export async function prepareFromSource(opts: {
   // Output to a stable dir OUTSIDE the checkout so a --source tree isn't dirtied.
   const distDir = join(OS_DIR, "from-source-dist");
   console.log("  Building release dist (compiles the dashboard — needs RAM/CPU)…");
-  await run(
-    "bun",
-    ["run", join(sourceDir, "apps/api/scripts/build-release.ts")],
-    sourceDir,
-    { DIST_DIR: distDir, NODE_ENV: "production", CLOUD_MODE: "false", OPENSHIP_TARGET: "local" },
-  );
+  await run("bun", ["run", join(sourceDir, "apps/api/scripts/build-release.ts")], sourceDir, {
+    DIST_DIR: distDir,
+    NODE_ENV: "production",
+    CLOUD_MODE: "false",
+    OPENSHIP_TARGET: "local",
+  });
 
   // Reproduce the runtime dependency graph from the generated frozen lockfile.
   console.log("  Installing runtime dependencies in the dist…");
@@ -155,7 +167,9 @@ export async function prepareFromSource(opts: {
   const apiDir = join(distDir, "api");
   const dashboardDir = join(distDir, "dashboard");
   if (!existsSync(join(apiDir, "src/index.ts"))) {
-    throw new Error(`Build produced no API at ${apiDir}/src/index.ts — build-release layout drift?`);
+    throw new Error(
+      `Build produced no API at ${apiDir}/src/index.ts — build-release layout drift?`,
+    );
   }
   if (!existsSync(join(dashboardDir, "apps/dashboard/server.js"))) {
     throw new Error(`Build produced no dashboard at ${dashboardDir}/apps/dashboard/server.js.`);

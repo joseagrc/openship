@@ -5,14 +5,26 @@
  * sidecar; callers verify downloads against it.
  */
 import { parseSha256 } from "./cache";
+import { normalizeGithubRepo } from "@repo/core";
 
 export const REPO = "oblien/openship";
 export const RELEASES = `https://github.com/${REPO}/releases`;
-const LATEST_API = `https://api.github.com/repos/${REPO}/releases/latest`;
+
+export function releaseRepo(): string {
+  return normalizeGithubRepo(process.env.OPENSHIP_UPDATE_REPO || process.env.OPENSHIP_REPO || REPO);
+}
+
+export function releasesUrl(repo = releaseRepo()): string {
+  return `https://github.com/${normalizeGithubRepo(repo)}/releases`;
+}
+
+export function latestApiUrl(repo = releaseRepo()): string {
+  return `https://api.github.com/repos/${normalizeGithubRepo(repo)}/releases/latest`;
+}
 
 /** Resolve the newest published release tag (e.g. "v0.1.9"). */
-export async function resolveLatestTag(): Promise<string> {
-  const res = await fetch(LATEST_API, {
+export async function resolveLatestTag(repo = releaseRepo()): Promise<string> {
+  const res = await fetch(latestApiUrl(repo), {
     headers: { Accept: "application/vnd.github+json", "User-Agent": "openship-cli" },
     signal: AbortSignal.timeout(10_000),
   });
@@ -23,8 +35,8 @@ export async function resolveLatestTag(): Promise<string> {
 }
 
 /** URL of a release asset for a tag. */
-export function assetUrl(tag: string, name: string): string {
-  return `${RELEASES}/download/${tag}/${name}`;
+export function assetUrl(tag: string, name: string, repo = releaseRepo()): string {
+  return `${releasesUrl(repo)}/download/${tag}/${name}`;
 }
 
 /** Fetch a `.sha256` sidecar body, or null on 404 (asset published without one). */

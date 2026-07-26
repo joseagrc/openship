@@ -10,7 +10,7 @@ import type {
   LatestRelease,
   UpdateState,
 } from "./types";
-import { changelogUrl } from "./types";
+import { changelogUrl, type UpdateSourceConfig } from "./types";
 import { compareSemver, satisfiesRange } from "./semver";
 
 const SEVERITY_RANK: Record<AdvisorySeverity, number> = { critical: 0, recommended: 1, info: 2 };
@@ -92,6 +92,7 @@ export interface ResolveUpdateInput {
   currentVersion: string;
   latestRelease: LatestRelease | null;
   manifest: AdvisoryManifest | null;
+  updateSource?: Pick<UpdateSourceConfig, "repo"> | null;
   /** Advisory ids the user already dismissed (ignored for critical). */
   dismissed?: readonly string[];
   /** User disabled follow-up notifications. Critical advisories still surface once. */
@@ -104,7 +105,14 @@ export interface ResolveUpdateInput {
  * `recommended`/`info` respect the mute toggle and per-id dismissal.
  */
 export function resolveUpdateState(input: ResolveUpdateInput): UpdateState {
-  const { currentVersion, latestRelease, manifest, dismissed = [], muted = false } = input;
+  const {
+    currentVersion,
+    latestRelease,
+    manifest,
+    updateSource,
+    dismissed = [],
+    muted = false,
+  } = input;
 
   const latestVersion = latestRelease?.version ?? null;
   const updateAvailable = !!latestVersion && compareSemver(latestVersion, currentVersion) > 0;
@@ -120,7 +128,7 @@ export function resolveUpdateState(input: ResolveUpdateInput): UpdateState {
     latestVersion,
     updateAvailable,
     advisories,
-    changelogUrl: changelogUrl(),
-    latestChangelogUrl: changelogUrl(latestRelease?.tag),
+    changelogUrl: changelogUrl(undefined, updateSource?.repo),
+    latestChangelogUrl: changelogUrl(latestRelease?.tag, updateSource?.repo),
   };
 }

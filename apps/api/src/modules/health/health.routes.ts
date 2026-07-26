@@ -3,6 +3,7 @@
  */
 import { Hono } from "hono";
 import { hostname, userInfo } from "node:os";
+import { updateSourceConfig } from "@repo/core";
 import { cloudRuntimeTarget, env } from "../../config/env";
 import { rateLimiterFor } from "../../middleware/rate-limiter";
 import { APP_VERSION } from "../../lib/app-version";
@@ -51,7 +52,11 @@ healthRoutes.get("/", (c) => {
   // `cloudMode` lets a migrate-control-plane flow cheaply refuse a multi-tenant
   // SaaS as a transfer TARGET before sending anything (GATE 3 probe) — an
   // instance import --wipe against the SaaS would truncate every tenant.
-  return c.json({ status: "ok", cloudMode: env.CLOUD_MODE === true, timestamp: new Date().toISOString() });
+  return c.json({
+    status: "ok",
+    cloudMode: env.CLOUD_MODE === true,
+    timestamp: new Date().toISOString(),
+  });
 });
 
 /** GET /health/env - static deployment info (no auth, cached by callers). Rate-
@@ -123,6 +128,13 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
     // must use these, not its static table, to reach the right cloud.
     cloudAuthUrl: cloudRuntimeTarget.dashboard,
     cloudApiUrl: cloudRuntimeTarget.api,
+    updateSource: updateSourceConfig({
+      repo: env.OPENSHIP_UPDATE_REPO,
+      branch: env.OPENSHIP_UPDATE_BRANCH,
+      channel: env.OPENSHIP_UPDATE_CHANNEL,
+      imageRegistry: env.OPENSHIP_IMAGE_REGISTRY,
+      version: env.OPENSHIP_VERSION ?? APP_VERSION,
+    }),
     ...(machineName && { machineName }),
     ...(env.HOST_DOMAIN && { hostDomain: env.HOST_DOMAIN }),
   });

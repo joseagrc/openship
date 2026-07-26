@@ -18,6 +18,12 @@ import { homedir } from "node:os";
 import { join } from "node:path";
 
 import { systemCatalog, type EnvironmentProfile } from "@repo/adapters";
+import {
+  DEFAULT_IMAGE_REGISTRY,
+  DEFAULT_UPDATE_BRANCH,
+  normalizeGithubRepo,
+  normalizeUpdateChannel,
+} from "@repo/core";
 
 import { OS_DIR } from "./paths";
 
@@ -112,6 +118,9 @@ export interface ComposeUpOpts {
   trustProxy?: boolean;
   registry?: string;
   version?: string;
+  updateRepo?: string;
+  updateBranch?: string;
+  updateChannel?: string;
 }
 
 /** Pinned compose stack. Vars come from the generated .env (env_file + interpolation). */
@@ -214,6 +223,10 @@ function keepSecret(existing: Record<string, string>, key: string): string {
   return existing[key] || randomBytes(32).toString("hex");
 }
 
+function firstConfigured(...values: Array<string | undefined>): string | undefined {
+  return values.find((value) => value && value.trim())?.trim();
+}
+
 /** Parse the existing .env so re-running `up` preserves generated secrets. */
 function readEnvFile(): Record<string, string> {
   const out: Record<string, string> = {};
@@ -277,13 +290,41 @@ function provisionHostSshChannel(): { user: string; keyPath: string } | null {
 
 function renderEnv(opts: ComposeUpOpts, host: { user: string; keyPath: string } | null): string {
   const prev = readEnvFile();
+  const registry =
+    firstConfigured(
+      opts.registry,
+      process.env.OPENSHIP_IMAGE_REGISTRY,
+      prev.OPENSHIP_IMAGE_REGISTRY,
+    ) || DEFAULT_IMAGE_REGISTRY;
+  const version =
+    firstConfigured(opts.version, process.env.OPENSHIP_VERSION, prev.OPENSHIP_VERSION) ||
+    (typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "latest");
+  const updateRepo = normalizeGithubRepo(
+    firstConfigured(opts.updateRepo, process.env.OPENSHIP_UPDATE_REPO, prev.OPENSHIP_UPDATE_REPO),
+  );
+  const updateBranch =
+    firstConfigured(
+      opts.updateBranch,
+      process.env.OPENSHIP_UPDATE_BRANCH,
+      prev.OPENSHIP_UPDATE_BRANCH,
+    ) || DEFAULT_UPDATE_BRANCH;
+  const updateChannel = normalizeUpdateChannel(
+    firstConfigured(
+      opts.updateChannel,
+      process.env.OPENSHIP_UPDATE_CHANNEL,
+      prev.OPENSHIP_UPDATE_CHANNEL,
+    ) || "docker",
+  );
   const lines: string[] = [
     "# Managed by `openship up`. Secrets are generated once and preserved.",
     "CLOUD_MODE=false",
     "OPENSHIP_TARGET=local",
     "OPENSHIP_REQUIRE_AUTH=true",
-    `OPENSHIP_IMAGE_REGISTRY=${opts.registry || "ghcr.io/oblien"}`,
-    `OPENSHIP_VERSION=${opts.version || (typeof __CLI_VERSION__ === "string" ? __CLI_VERSION__ : "latest")}`,
+    `OPENSHIP_IMAGE_REGISTRY=${registry}`,
+    `OPENSHIP_VERSION=${version}`,
+    `OPENSHIP_UPDATE_REPO=${updateRepo}`,
+    `OPENSHIP_UPDATE_BRANCH=${updateBranch}`,
+    `OPENSHIP_UPDATE_CHANNEL=${updateChannel}`,
     `POSTGRES_PASSWORD=${keepSecret(prev, "POSTGRES_PASSWORD")}`,
     `BETTER_AUTH_SECRET=${keepSecret(prev, "BETTER_AUTH_SECRET")}`,
     `INTERNAL_TOKEN=${keepSecret(prev, "INTERNAL_TOKEN")}`,
@@ -347,7 +388,9 @@ export function composeUpdate(version?: string): boolean {
     env.OPENSHIP_VERSION = version;
     writeFileSync(
       ENV_FILE,
-      Object.entries(env).map(([k, v]) => `${k}=${v}`).join("\n") + "\n",
+      Object.entries(env)
+        .map(([k, v]) => `${k}=${v}`)
+        .join("\n") + "\n",
       { mode: 0o600 },
     );
   }

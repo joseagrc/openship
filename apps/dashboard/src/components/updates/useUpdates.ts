@@ -11,13 +11,14 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  RELEASES_LATEST_API,
   advisoryManifestUrl,
+  releasesLatestApi,
   parseManifest,
   resolveUpdateState,
   compareSemver,
   type AdvisoryManifest,
   type LatestRelease,
+  type UpdateSourceConfig,
   type UpdateState,
 } from "@repo/core";
 import { useDeploymentInfo } from "@/hooks/useDeploymentInfo";
@@ -42,8 +43,10 @@ async function getPrefs(): Promise<Prefs> {
   const cfg = isDesktop() ? window.desktop?.config : undefined;
   if (cfg) {
     const notif = await cfg.get<boolean | undefined>("updateNotifications").catch(() => undefined);
-    const dismissed = (await cfg.get<string[] | undefined>("dismissedAdvisoryIds").catch(() => undefined)) ?? [];
-    const lastSeen = (await cfg.get<string | undefined>("lastSeenVersion").catch(() => undefined)) ?? null;
+    const dismissed =
+      (await cfg.get<string[] | undefined>("dismissedAdvisoryIds").catch(() => undefined)) ?? [];
+    const lastSeen =
+      (await cfg.get<string | undefined>("lastSeenVersion").catch(() => undefined)) ?? null;
     return { muted: notif === false, dismissed, lastSeen };
   }
   let dismissed: string[] = [];
@@ -68,7 +71,8 @@ async function persistMuted(muted: boolean): Promise<void> {
 async function persistDismissed(id: string): Promise<void> {
   const cfg = isDesktop() ? window.desktop?.config : undefined;
   if (cfg) {
-    const cur = (await cfg.get<string[] | undefined>("dismissedAdvisoryIds").catch(() => undefined)) ?? [];
+    const cur =
+      (await cfg.get<string[] | undefined>("dismissedAdvisoryIds").catch(() => undefined)) ?? [];
     if (!cur.includes(id)) await cfg.set("dismissedAdvisoryIds", [...cur, id]);
     return;
   }
@@ -89,36 +93,50 @@ async function persistLastSeen(version: string): Promise<void> {
 
 // Session-scoped cache: fetch GitHub once per app session (GitHub rate-limits
 // unauthenticated calls to 60/hr/IP; navigation shouldn't re-hit it).
-let remoteCache: Promise<{ latest: LatestRelease | null; manifest: AdvisoryManifest | null }> | null = null;
+let remoteCache: {
+  key: string;
+  promise: Promise<{ latest: LatestRelease | null; manifest: AdvisoryManifest | null }>;
+} | null = null;
 
-async function fetchRemote(): Promise<{ latest: LatestRelease | null; manifest: AdvisoryManifest | null }> {
-  remoteCache ??= (async () => {
-    let latest: LatestRelease | null = null;
-    let manifest: AdvisoryManifest | null = null;
-    try {
-      const res = await fetch(RELEASES_LATEST_API, {
-        headers: { Accept: "application/vnd.github+json" },
-      });
-      if (res.ok) {
-        const data = (await res.json()) as { tag_name?: string; body?: string };
-        const tag = data.tag_name ?? "";
-        if (tag) {
-          latest = { version: tag.replace(/^v/, ""), tag, notes: data.body ?? "" };
-          // Advisories pinned to the release TAG — main commits never surface.
-          try {
-            const m = await fetch(advisoryManifestUrl(tag), { headers: { Accept: "application/json" } });
-            if (m.ok) manifest = parseManifest(await m.json());
-          } catch {
-            /* no manifest at this tag → no advisories */
+async function fetchRemote(
+  updateSource?: UpdateSourceConfig | null,
+): Promise<{ latest: LatestRelease | null; manifest: AdvisoryManifest | null }> {
+  const repo = updateSource?.repo;
+  const key = repo ?? "default";
+  if (remoteCache?.key !== key) {
+    remoteCache = {
+      key,
+      promise: (async () => {
+        let latest: LatestRelease | null = null;
+        let manifest: AdvisoryManifest | null = null;
+        try {
+          const res = await fetch(releasesLatestApi(repo), {
+            headers: { Accept: "application/vnd.github+json" },
+          });
+          if (res.ok) {
+            const data = (await res.json()) as { tag_name?: string; body?: string };
+            const tag = data.tag_name ?? "";
+            if (tag) {
+              latest = { version: tag.replace(/^v/, ""), tag, notes: data.body ?? "" };
+              // Advisories pinned to the release TAG — main commits never surface.
+              try {
+                const m = await fetch(advisoryManifestUrl(tag, repo), {
+                  headers: { Accept: "application/json" },
+                });
+                if (m.ok) manifest = parseManifest(await m.json());
+              } catch {
+                /* no manifest at this tag → no advisories */
+              }
+            }
           }
+        } catch {
+          /* offline / rate-limited → no update info */
         }
-      }
-    } catch {
-      /* offline / rate-limited → no update info */
-    }
-    return { latest, manifest };
-  })();
-  return remoteCache;
+        return { latest, manifest };
+      })(),
+    };
+  }
+  return remoteCache.promise;
 }
 
 // The SaaS advisory source: operator-pushed platform notices from our own API
@@ -146,6 +164,7 @@ export type UpdatePhase = "idle" | "downloading" | "installing" | "error";
 export interface UseUpdates {
   state: UpdateState | null;
   latest: LatestRelease | null;
+  updateSource: UpdateSourceConfig | null;
   muted: boolean;
   desktop: boolean;
   /** The version to celebrate in a "what's new" notice, or null. */
@@ -192,7 +211,9 @@ export function useUpdates(): UseUpdates {
       const [prefs, manifest] = await Promise.all([getPrefs(), fetchNotices()]);
       setMutedState(prefs.muted);
       const advisories = manifest.advisories
-        .filter((a) => a.severity === "critical" || (!prefs.muted && !prefs.dismissed.includes(a.id)))
+        .filter(
+          (a) => a.severity === "critical" || (!prefs.muted && !prefs.dismissed.includes(a.id)),
+        )
         .sort((x, y) => (SEVERITY_RANK[x.severity] ?? 9) - (SEVERITY_RANK[y.severity] ?? 9));
       setState({
         currentVersion: deployInfo.version ?? "",
@@ -219,7 +240,7 @@ export function useUpdates(): UseUpdates {
     // the SAME banner. Merge them with the GitHub release advisories.
     const [prefs, remote, notices] = await Promise.all([
       getPrefs(),
-      fetchRemote(),
+      fetchRemote(deployInfo?.updateSource),
       fetchNotices().catch(() => ({ advisories: [] })),
     ]);
     setMutedState(prefs.muted);
@@ -228,6 +249,7 @@ export function useUpdates(): UseUpdates {
       currentVersion: current,
       latestRelease: remote.latest,
       manifest: remote.manifest,
+      updateSource: deployInfo?.updateSource,
       dismissed: prefs.dismissed,
       muted: prefs.muted,
     });
@@ -246,7 +268,13 @@ export function useUpdates(): UseUpdates {
     } else if (compareSemver(current, prefs.lastSeen) > 0) {
       setWhatsNewVersion(current);
     }
-  }, [deployInfo?.version, deployInfo?.selfHosted]);
+  }, [
+    deployInfo?.version,
+    deployInfo?.selfHosted,
+    deployInfo?.updateSource?.repo,
+    deployInfo?.updateSource?.branch,
+    deployInfo?.updateSource?.channel,
+  ]);
 
   useEffect(() => {
     void load();
@@ -337,6 +365,7 @@ export function useUpdates(): UseUpdates {
   return {
     state,
     latest,
+    updateSource: deployInfo?.updateSource ?? null,
     muted,
     desktop: isDesktop(),
     whatsNewVersion,

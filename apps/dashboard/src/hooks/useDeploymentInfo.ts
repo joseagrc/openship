@@ -13,6 +13,7 @@
  */
 
 import { useEffect, useState } from "react";
+import type { UpdateSourceConfig } from "@repo/core";
 import { api } from "@/lib/api/client";
 
 export type ClientDeploymentInfo = {
@@ -25,6 +26,8 @@ export type ClientDeploymentInfo = {
   };
   /** Running server release (self-hosted). Absent on older servers. */
   version?: string;
+  /** Runtime-configured source for release checks, advisories, and self-hosted images. */
+  updateSource?: UpdateSourceConfig;
 };
 
 let cached: Promise<ClientDeploymentInfo> | null = null;

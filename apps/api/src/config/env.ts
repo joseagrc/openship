@@ -6,6 +6,9 @@ import {
   cloudRuntimeTargetId,
   dashboardRuntimeOrigins,
   LOCAL_WEB_URL,
+  DEFAULT_IMAGE_REGISTRY,
+  DEFAULT_UPDATE_BRANCH,
+  DEFAULT_UPDATE_REPO,
 } from "@repo/core";
 
 export { runtimeTarget, runtimeTargetId, cloudRuntimeTarget, cloudRuntimeTargetId };
@@ -132,12 +135,29 @@ const envSchema = z.object({
   CLOUD_MAX_PROJECTS_PER_USER: z.coerce.number().int().min(1).default(2),
   /**
    * Deployment mode - determines the runtime + infrastructure combination:
-    *   - "docker"  (default) → Docker runtime + OpenResty routing/SSL (self-hosted)
-    *   - "bare"              → Process runtime + OpenResty routing/SSL (self-hosted)
+   *   - "docker"  (default) → Docker runtime + OpenResty routing/SSL (self-hosted)
+   *   - "bare"              → Process runtime + OpenResty routing/SSL (self-hosted)
    *   - "cloud"             → Oblien cloud API for everything (auto-set when CLOUD_MODE=true)
    *   - "desktop"           → Bare runtime, no routing/SSL (desktop app)
    */
   DEPLOY_MODE: z.enum(["docker", "bare", "cloud", "desktop"]).default("docker"),
+
+  /* ---------- Update source (self-hosted/desktop) ---------- */
+  /**
+   * GitHub owner/repo used for update checks, release links, and pinned
+   * advisory manifests. Forked self-hosted installs can set
+   * OPENSHIP_UPDATE_REPO=joseagrc/openship without depending on the upstream
+   * oblien/openship release stream.
+   */
+  OPENSHIP_UPDATE_REPO: z.string().default(DEFAULT_UPDATE_REPO),
+  /** Branch used by source installs and source links. Release checks stay tag-pinned. */
+  OPENSHIP_UPDATE_BRANCH: z.string().default(DEFAULT_UPDATE_BRANCH),
+  /** release=distro releases, docker=compose images, source=git checkout rebuilds. */
+  OPENSHIP_UPDATE_CHANNEL: z.enum(["release", "docker", "source"]).default("release"),
+  /** Container image registry namespace for self-hosted compose images. */
+  OPENSHIP_IMAGE_REGISTRY: z.string().default(DEFAULT_IMAGE_REGISTRY),
+  /** Running/pinned image or release version, when provided by compose/installers. */
+  OPENSHIP_VERSION: z.string().optional(),
 
   /* ---------- Auth (Better Auth) ---------- */
   BETTER_AUTH_SECRET: z.string().default(DEFAULT_BETTER_AUTH_SECRET),
@@ -167,9 +187,7 @@ const envSchema = z.object({
    *                        Higher security, may break legit users that
    *                        change network/device.
    */
-  CLOUD_SESSION_PINNING: z
-    .enum(["off", "warn", "strict"])
-    .default("warn"),
+  CLOUD_SESSION_PINNING: z.enum(["off", "warn", "strict"]).default("warn"),
 
   /* ---------- OAuth Providers ---------- */
   GITHUB_CLIENT_ID: z.string().optional(),
@@ -322,7 +340,11 @@ const envSchema = z.object({
    * regardless of activity. Defaults to 1 hour. Limits long-lived
    * sessions from accumulating across operator forgetting to close tabs.
    */
-  TERMINAL_HARD_CAP_MS: z.coerce.number().int().min(60_000).default(60 * 60_000),
+  TERMINAL_HARD_CAP_MS: z.coerce
+    .number()
+    .int()
+    .min(60_000)
+    .default(60 * 60_000),
   /**
    * Maximum concurrent terminal sessions per user across all servers.
    * Enforced at handshake against the audit table (rows with endedAt IS
@@ -392,10 +414,7 @@ export const REDIS_REQUIRED =
 // Safety guard — never boot on a deployable target with the placeholder
 // auth secret. `local` is allowed because that's pure-dev / desktop.
 // The secret is a real secret in every saas-shaped deployment.
-if (
-  runtimeTargetId !== "local" &&
-  env.BETTER_AUTH_SECRET === DEFAULT_BETTER_AUTH_SECRET
-) {
+if (runtimeTargetId !== "local" && env.BETTER_AUTH_SECRET === DEFAULT_BETTER_AUTH_SECRET) {
   throw new Error(
     `BETTER_AUTH_SECRET must be set to a secure value when OPENSHIP_TARGET="${runtimeTargetId}".`,
   );
@@ -437,11 +456,7 @@ if (env.CLOUD_MODE && (env.GITHUB_AUTH_MODE === "cli" || env.GITHUB_AUTH_MODE ==
 // unless the flag is true (desktop is exempt — zero-auth is default
 // there). Logging here surfaces the misconfiguration in the boot
 // banner so the operator sees it.
-if (
-  env.DEPLOY_MODE !== "desktop" &&
-  !env.OPENSHIP_ALLOW_ZERO_AUTH &&
-  env.NODE_ENV !== "test"
-) {
+if (env.DEPLOY_MODE !== "desktop" && !env.OPENSHIP_ALLOW_ZERO_AUTH && env.NODE_ENV !== "test") {
   console.log(
     `[env] OPENSHIP_ALLOW_ZERO_AUTH=false (default) — zero-auth fallback disabled on this non-desktop instance.`,
   );
@@ -503,9 +518,7 @@ if (env.OPENSHIP_ADVERTISED_ORIGIN) {
 function validateCookieDomain(raw: string): void {
   const value = raw.trim();
   if (!value.startsWith(".")) {
-    throw new Error(
-      `BETTER_AUTH_COOKIE_DOMAIN must start with "." (got "${raw}").`,
-    );
+    throw new Error(`BETTER_AUTH_COOKIE_DOMAIN must start with "." (got "${raw}").`);
   }
   const labels = value.slice(1).split(".").filter(Boolean);
   if (labels.length < 2) {
@@ -563,8 +576,8 @@ if (!env.CLOUD_MODE) {
   if (stale.length > 0) {
     console.warn(
       `[env] Self-hosted instances no longer use local GitHub App credentials. ` +
-      `These env vars are ignored: ${stale.join(", ")}. ` +
-      `Connect to Openship Cloud in Settings to enable App-scoped GitHub access.`,
+        `These env vars are ignored: ${stale.join(", ")}. ` +
+        `Connect to Openship Cloud in Settings to enable App-scoped GitHub access.`,
     );
   }
 }
@@ -588,9 +601,7 @@ export const trustedOrigins = [
     // and Better Auth's login CSRF check — otherwise remote login is rejected.
     ...(env.OPENSHIP_PUBLIC_URL ? [env.OPENSHIP_PUBLIC_URL.replace(/\/+$/, "")] : []),
     ...extraTrustedOrigins,
-    ...(env.NODE_ENV === "production"
-      ? []
-      : [LOCAL_WEB_URL, ...dashboardRuntimeOrigins]),
+    ...(env.NODE_ENV === "production" ? [] : [LOCAL_WEB_URL, ...dashboardRuntimeOrigins]),
   ]),
 ];
 

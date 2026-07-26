@@ -18,6 +18,9 @@
 #   instead, layer the override:
 #     docker compose -f docker/docker-compose.yml -f docker/docker-compose.build.yml \
 #       --env-file .env up -d --build
+#   Settings → Updates reads OPENSHIP_UPDATE_REPO / OPENSHIP_UPDATE_BRANCH /
+#   OPENSHIP_UPDATE_CHANNEL from .env, so forks can track their own GitHub
+#   releases/advisories instead of github.com/oblien/openship.
 #
 # The SaaS control plane is the ROOT ../docker-compose.yml, not this file.
 #
@@ -129,7 +132,11 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "bun -e \"fetch('http://127.0.0.1:${API_PORT:-4000}/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      test:
+        [
+          "CMD-SHELL",
+          'bun -e "fetch(''http://127.0.0.1:${API_PORT:-4000}/api/health'').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+        ]
       interval: 10s
       timeout: 5s
       retries: 12
