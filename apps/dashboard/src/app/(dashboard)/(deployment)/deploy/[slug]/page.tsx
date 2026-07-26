@@ -215,8 +215,9 @@ const DeployRepository: React.FC = () => {
                 });
             } else if (decoded.kind === "git") {
                 result = await initializeFromGitUrl(decoded.url, {
-                    branch: branch ?? decoded.branch,
-                    projectId,
+                  branch: branch ?? decoded.branch,
+                  projectId,
+                  provider: decoded.provider,
                 });
             } else {
                 result = await initializeFromRepo(decoded.owner, decoded.repo, force, {

@@ -17,7 +17,7 @@ import {
   resolveEffectiveTarget,
   usesManagedRouting as usesManagedRoutingFor,
 } from "../../lib/deployment-runtime";
-import { resolveServiceHostnameLabel, normalizeCustomHostname } from "@repo/core";
+import { isGitHubProvider, resolveServiceHostnameLabel, normalizeCustomHostname } from "@repo/core";
 import { cloudClient } from "../../lib/cloud/client";
 import { isCloudConnectedForOrg } from "../../lib/cloud/session";
 import { runCloudPreflight, type CloudPreflightData } from "../../lib/cloud-preflight";
@@ -122,6 +122,7 @@ export interface PreflightOptions {
    *  AFTER provisioning resources. Catching it here surfaces a clear
    *  "install the App on <owner>" message and skips the wasted work. */
   gitOwner?: string | null;
+  gitProvider?: string | null;
   /** Git repo name — with `gitOwner`, lets preflight probe whether the repo is
    *  PUBLIC and, if so, skip the credential checks (a public repo clones with
    *  no auth). Falls back to parsing the snapshot's repoUrl when omitted. */
@@ -1255,6 +1256,7 @@ export async function runPreflightChecks(
 
   const effectiveBuildStrategy =
     opts?.buildStrategy ?? (snapshot.buildStrategy as "local" | "server" | undefined);
+  const repoIsGithub = isGitHubProvider(opts?.gitProvider) && !!opts?.gitOwner;
 
   // A PUBLIC github.com repo clones with NO credential, so none of the
   // credential checks below should block it — this is how a public repo
@@ -1262,7 +1264,7 @@ export async function runPreflightChecks(
   // unknown / non-github ⇒ repoIsPublic=false ⇒ existing behavior, nothing
   // regresses. When public, we skip the App-install AND remote-clone-token
   // demands, and the deploy-time clone goes anonymous (clone-auth.ts).
-  const ghRepo = parseGithubOwnerRepo(snapshot.repoUrl, opts?.gitOwner, opts?.gitRepo);
+  const ghRepo = repoIsGithub ? parseGithubOwnerRepo(snapshot.repoUrl, opts?.gitOwner, opts?.gitRepo) : null;
   const repoIsPublic = ghRepo ? await isPublicRepo(ghRepo.owner, ghRepo.repo) : false;
 
   // GitHub App installation check — only relevant when the repo is cloned on a
@@ -1270,7 +1272,7 @@ export async function runPreflightChecks(
   // clones on the API host using local credentials (gh CLI / OAuth), so the
   // cloud App installation is irrelevant — skip it. This mirrors the
   // remote-clone-token check below, which already passes for local builds.
-  if (!repoIsPublic && getGitHubAuthMode() === "app" && effectiveBuildStrategy !== "local") {
+  if (repoIsGithub && !repoIsPublic && getGitHubAuthMode() === "app" && effectiveBuildStrategy !== "local") {
     checks.push(
       await checkGitHubAppInstallation(githubCtx, opts?.gitOwner),
     );
@@ -1285,6 +1287,7 @@ export async function runPreflightChecks(
   // local and these checks would wrongly demand a remote/App/cloud credential.
   const runtimeMode = snapshot.runtimeMode ?? "docker";
   const clonesOnRemote =
+    repoIsGithub &&
     !repoIsPublic &&
     runtimeMode === "bare" &&
     effectiveTarget === "server" &&
@@ -1327,10 +1330,7 @@ export async function runPreflightChecks(
     buildStrategy: effectiveBuildStrategy,
     isDesktop: plat.target === "desktop",
     forwardGitCredentials: snapshot.forwardGitCredentials,
-    // GitHub projects carry a parsed gitOwner; docker acquires the source
-    // tarball on the server for them. Same structured signal the pipeline uses
-    // (`!!project.gitOwner`) so the two decisions can't drift.
-    repoIsGithub: !!opts?.gitOwner,
+    repoIsGithub,
   }).dockerClonesOnServer;
   if (dockerClonesOnServer) {
     checks.push(

@@ -9,7 +9,7 @@ import type { Service } from "@/lib/api/services";
 import { ApiError, getApiErrorMessage } from "@/lib/api/client";
 import { settingsApi } from "@/lib/api/settings";
 import type { BuildMode } from "@/lib/api/settings";
-import { STACKS, getBuildImage, type StackDefinition, type StackId } from "@repo/core";
+import { STACKS, getBuildImage, parseGitRepositoryUrl, type StackDefinition, type StackId } from "@repo/core";
 import type { BuildStrategy, DeploymentConfig, DeploymentModeSnapshot, MonorepoAppConfig, MonorepoWorkspaceConfig, PublicEndpoint } from "./types";
 import {
   DEFAULT_CONFIG,
@@ -808,7 +808,7 @@ export function useDeploymentConfig() {
   const initializeFromGitUrl = useCallback(
     async (
       url: string,
-      context?: { branch?: string; projectId?: string },
+      context?: { branch?: string; projectId?: string; provider?: string },
     ): Promise<{ success: boolean; error?: string; errorType?: string }> => {
       try {
         let project: PersistedProject = null;
@@ -817,10 +817,12 @@ export function useDeploymentConfig() {
           project = projectResponse?.data?.project ?? projectResponse?.project ?? null;
         }
 
+        const sourceUrl = project?.gitUrl || url;
         const requestedBranch = (project?.gitBranch || context?.branch || "").trim() || undefined;
         const response = await deployApi.prepare({
           source: "git",
-          url: project?.gitUrl || url,
+          url: sourceUrl,
+          provider: project?.gitProvider || context?.provider,
           branch: requestedBranch,
         });
 
@@ -839,6 +841,7 @@ export function useDeploymentConfig() {
           selectedBranch && !branches.includes(selectedBranch)
             ? [selectedBranch, ...branches]
             : branches;
+        const parsed = parseGitRepositoryUrl(sourceUrl, response.repository.provider);
 
         setConfig((prev) => buildPreparedConfig(prev, {
           response,
@@ -848,7 +851,7 @@ export function useDeploymentConfig() {
           branch: selectedBranch,
           branches: branchOptions,
           projectId: context?.projectId,
-          gitProvider: "git",
+          gitProvider: response.repository.provider || parsed?.provider || "git",
           gitUrl: response.repository.clone_url || url,
         }));
 

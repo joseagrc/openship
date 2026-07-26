@@ -7,7 +7,7 @@
 
 import { existsSync, readFileSync } from "node:fs";
 import { repos } from "@repo/db";
-import { NotFoundError, ForbiddenError, normalizeEnvironment } from "@repo/core";
+import { NotFoundError, ForbiddenError, isGitHubProvider, normalizeEnvironment } from "@repo/core";
 import type { LogEntry } from "@repo/adapters";
 import type { RequestContext } from "../../lib/request-context";
 import { resolveDeploymentRuntime, type DeploymentMeta } from "../../lib/deployment-runtime";
@@ -30,6 +30,7 @@ export async function assertGitHubAccessForDeployment(
   const dep = await getDeployment(deploymentId, organizationId);
   const project = await repos.project.findById(dep.projectId);
   if (!project) return;
+  if (!isGitHubProvider(project.gitProvider)) return;
   await assertGitHubRepoAccess(ctx, {
     owner: project.gitOwner,
     repo: project.gitRepo,
@@ -429,4 +430,3 @@ export async function getBuildLogs(
   }
   return buildSession.logs as LogEntry[];
 }
-

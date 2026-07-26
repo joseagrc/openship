@@ -11,7 +11,7 @@ const PROJECT_PREFIX = "project:";
 
 type DecodedSlug =
   | { kind: "repo"; owner: string; repo: string; branch?: string; projectId?: string }
-  | { kind: "git"; url: string; branch?: string }
+  | { kind: "git"; url: string; branch?: string; provider?: string }
   | { kind: "local"; path: string }
   | { kind: "upload"; sessionId: string }
   | { kind: "project"; projectId: string };
@@ -47,8 +47,12 @@ export function encodeUploadSlug(sessionId: string): string {
   return encodeBase64Url(UPLOAD_PREFIX + sessionId);
 }
 
-export function encodeGitSlug(url: string, branch?: string): string {
-  return encodeBase64Url(GIT_PREFIX + JSON.stringify({ url, ...(branch ? { branch } : {}) }));
+export function encodeGitSlug(url: string, branch?: string, provider?: string): string {
+  return encodeBase64Url(GIT_PREFIX + JSON.stringify({
+    url,
+    ...(branch ? { branch } : {}),
+    ...(provider ? { provider } : {}),
+  }));
 }
 
 /**
@@ -88,12 +92,13 @@ export function decodeSlug(slug: string): DecodedSlug | null {
     if (decoded.startsWith(GIT_PREFIX)) {
       const raw = decoded.slice(GIT_PREFIX.length);
       const payload = raw.startsWith("{") ? JSON.parse(raw) : { url: raw };
-      const { url, branch } = payload as Record<string, unknown>;
+      const { url, branch, provider } = payload as Record<string, unknown>;
       if (typeof url !== "string" || !url) return null;
       return {
         kind: "git",
         url,
         ...(typeof branch === "string" && branch ? { branch } : {}),
+        ...(typeof provider === "string" && provider ? { provider } : {}),
       };
     }
 

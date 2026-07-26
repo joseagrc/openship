@@ -29,6 +29,14 @@ export {
   type EnvironmentInput,
   type LegacyEnvironment,
 } from "./environments";
+export {
+  GIT_PROVIDERS,
+  isGitHubProvider,
+  isGitProvider,
+  parseGitRepositoryUrl,
+  type GitProvider,
+  type GitRepositoryIdentity,
+} from "./git-providers";
 
 export const DOMAIN_STATUSES = ["pending", "active", "failed", "removing"] as const;
 

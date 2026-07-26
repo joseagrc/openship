@@ -16,6 +16,8 @@ import {
   isBehind,
   GITHUB_REPO,
   normalizeEnvironment,
+  isGitHubProvider,
+  parseGitRepositoryUrl,
   type ReleaseSource,
   type UpdatableIdentity,
 } from "@repo/core";
@@ -226,10 +228,6 @@ function sanitizeGitCloneUrl(value?: string | null) {
   throw new ValidationError("gitUrl must be an HTTPS or SSH Git URL");
 }
 
-function isGithubProvider(provider?: string | null) {
-  return !provider || provider === "github";
-}
-
 function resolveProjectSource(data: TCreateProjectBody) {
   // Release/dist source: a prebuilt dist, no git repo and no stored localPath
   // (its dir is resolved per-deploy). The source repo, if any, lives in
@@ -244,20 +242,25 @@ function resolveProjectSource(data: TCreateProjectBody) {
     throw new ForbiddenError("Release/dist source projects are not available in cloud mode");
   }
   const safeLocalPath = !isRelease && data.localPath && !env.CLOUD_MODE ? data.localPath : undefined;
-  const requestedProvider = data.gitProvider ?? "github";
+  const parsedGitUrl = data.gitUrl ? parseGitRepositoryUrl(data.gitUrl, data.gitProvider) : null;
+  const requestedProvider = parsedGitUrl?.provider ?? data.gitProvider ?? "github";
   const genericGitUrl =
-    !isRelease && !safeLocalPath && !isGithubProvider(requestedProvider)
+    !isRelease && !safeLocalPath && !isGitHubProvider(requestedProvider)
       ? sanitizeGitCloneUrl(data.gitUrl)
       : undefined;
-  const gitOwner = isRelease || safeLocalPath || genericGitUrl ? undefined : data.gitOwner;
-  const gitRepo = isRelease || safeLocalPath || genericGitUrl ? undefined : data.gitRepo;
+  const explicitGitHubUrl =
+    !isRelease && !safeLocalPath && !genericGitUrl && parsedGitUrl && isGitHubProvider(requestedProvider)
+      ? sanitizeGitCloneUrl(data.gitUrl)
+      : undefined;
+  const gitOwner = isRelease || safeLocalPath ? undefined : (genericGitUrl ? parsedGitUrl?.owner : data.gitOwner);
+  const gitRepo = isRelease || safeLocalPath ? undefined : (genericGitUrl ? parsedGitUrl?.repo : data.gitRepo);
 
   return {
     safeLocalPath,
     gitOwner,
     gitRepo,
     gitProvider: isRelease ? "release" : safeLocalPath ? "local" : requestedProvider,
-    gitUrl: genericGitUrl ?? projectGitUrl(gitOwner, gitRepo),
+    gitUrl: genericGitUrl ?? explicitGitHubUrl ?? projectGitUrl(gitOwner, gitRepo),
     releaseSource: isRelease ? ((data.releaseSource as ReleaseSource | undefined) ?? null) : null,
   };
 }
@@ -1124,7 +1127,13 @@ export async function createProjectEnvironment(
   );
 
   let productionBranch = base.gitBranch ?? undefined;
-  if (!productionBranch && environmentType === "production" && base.gitOwner && base.gitRepo) {
+  if (
+    !productionBranch &&
+    environmentType === "production" &&
+    isGitHubProvider(base.gitProvider) &&
+    base.gitOwner &&
+    base.gitRepo
+  ) {
     // userId here is the actor who triggered the action — used to authorize
     // the GitHub call against their installation token.
     productionBranch = await resolveDefaultBranch(ctx, base.gitOwner, base.gitRepo);
@@ -1134,7 +1143,13 @@ export async function createProjectEnvironment(
     data.gitBranch?.trim() ||
     (environmentType === "production" ? (productionBranch ?? "main") : environmentSlug);
 
-  if ((data.sourceMode ?? "branch") === "branch" && base.gitOwner && base.gitRepo && gitBranch) {
+  if (
+    (data.sourceMode ?? "branch") === "branch" &&
+    isGitHubProvider(base.gitProvider) &&
+    base.gitOwner &&
+    base.gitRepo &&
+    gitBranch
+  ) {
     const branches = await listGitHubBranches(ctx, base.gitOwner, base.gitRepo);
     const exists = branches.some((branch) => branch.name === gitBranch);
     if (!exists) {
@@ -1240,7 +1255,7 @@ export async function getProjectCommitStatus(
   }
 
   // Commit-source: only GitHub-backed projects have a remote branch HEAD to compare against.
-  if (!p.gitOwner || !p.gitRepo) {
+  if (!isGitHubProvider(p.gitProvider) || !p.gitOwner || !p.gitRepo) {
     // Repo-less services/app projects (n8n/Convex/…): image-tag/digest drift.
     // Returns {supported:false} when the project has no image services.
     return getImageDriftStatus(p);

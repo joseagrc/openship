@@ -748,7 +748,7 @@ export interface DeploymentContextType {
   ) => Promise<{ success: boolean; error?: string; errorType?: string }>;
   initializeFromGitUrl: (
     url: string,
-    context?: { branch?: string; projectId?: string },
+    context?: { branch?: string; projectId?: string; provider?: string },
   ) => Promise<{ success: boolean; error?: string; errorType?: string }>;
   /** Folder-upload hydration — seed from the user-picked stack's defaults
    *  (no auto-detection); falls back to the session scan when no stack given. */

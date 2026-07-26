@@ -6,6 +6,7 @@ import { promisify } from "node:util";
 import type { ProjectInfo } from "./prepare.service";
 import { resolveFromReader } from "./prepare.service";
 import { createLocalReader } from "./local-source";
+import { parseGitRepositoryUrl } from "@repo/core";
 
 const execFileAsync = promisify(execFile);
 const GIT_TIMEOUT_MS = 60_000;
@@ -21,35 +22,19 @@ function sanitizeGitUrl(raw: string): string {
   throw new Error("Only HTTPS or SSH Git URLs are supported");
 }
 
-function inferRepoMeta(repoUrl: string): {
-  name: string;
-  fullName: string;
-  owner: string;
-  htmlUrl?: string;
-} {
-  const stripGit = (value: string) => value.replace(/\.git$/i, "");
+function inferRepoMeta(repoUrl: string, provider?: string) {
+  const parsed = parseGitRepositoryUrl(repoUrl, provider);
+  if (parsed) return parsed;
 
-  try {
-    const url = new URL(repoUrl);
-    const parts = url.pathname.split("/").filter(Boolean).map(decodeURIComponent);
-    const repo = stripGit(parts.at(-1) ?? "repository");
-    const owner = parts.length > 1 ? parts.at(-2)! : url.hostname;
-    return {
-      name: repo,
-      fullName: parts.length > 1 ? `${owner}/${repo}` : `${url.hostname}/${repo}`,
-      owner,
-      ...(url.protocol === "http:" || url.protocol === "https:"
-        ? { htmlUrl: `${url.protocol}//${url.host}/${parts.map(encodeURIComponent).join("/")}` }
-        : {}),
-    };
-  } catch {
-    const match = repoUrl.match(/^git@([^:]+):(.+)$/i);
-    const path = match?.[2] ?? repoUrl;
-    const parts = path.split("/").filter(Boolean);
-    const repo = stripGit(parts.at(-1) ?? basename(path) ?? "repository");
-    const owner = parts.length > 1 ? parts.at(-2)! : match?.[1] ?? "git";
-    return { name: repo, fullName: `${owner}/${repo}`, owner };
-  }
+  const path = repoUrl.match(/^git@([^:]+):(.+)$/i)?.[2] ?? repoUrl;
+  const repo = basename(path).replace(/\.git$/i, "") || "repository";
+  return {
+    provider: "git" as const,
+    host: "git",
+    repo,
+    fullName: repo,
+    cloneUrl: repoUrl,
+  };
 }
 
 async function git(args: string[], opts?: { cwd?: string }): Promise<string> {
@@ -81,7 +66,11 @@ async function listBranches(repoUrl: string): Promise<Array<{ name: string }>> {
     .map((name) => ({ name }));
 }
 
-export async function resolveFromGitUrl(repoUrlInput: string, branch?: string): Promise<ProjectInfo> {
+export async function resolveFromGitUrl(
+  repoUrlInput: string,
+  branch?: string,
+  provider?: string,
+): Promise<ProjectInfo> {
   const repoUrl = sanitizeGitUrl(repoUrlInput);
   const defaultBranch = await resolveDefaultBranch(repoUrl);
   const selectedBranch = branch?.trim() || defaultBranch;
@@ -91,18 +80,19 @@ export async function resolveFromGitUrl(repoUrlInput: string, branch?: string): 
   try {
     await git(["clone", "--depth", "1", "--branch", selectedBranch, repoUrl, dir]);
     const reader = createLocalReader(dir);
-    const meta = inferRepoMeta(repoUrl);
+    const meta = inferRepoMeta(repoUrl, provider);
     return resolveFromReader(
       reader,
       {
-        name: meta.name,
+        name: meta.repo,
         full_name: meta.fullName,
-        owner: meta.owner,
+        owner: meta.owner ?? meta.host,
         private: true,
         default_branch: defaultBranch,
         selected_branch: selectedBranch,
         clone_url: repoUrl,
         html_url: meta.htmlUrl,
+        provider: meta.provider,
         branches,
       },
       selectedBranch,

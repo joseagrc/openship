@@ -317,6 +317,7 @@ export async function prepare(c: Context) {
   const ctx = getRequestContext(c);
   const body = await c.req.json<{
     source?: "github" | "git" | "local";
+    provider?: string;
     owner?: string;
     repo?: string;
     branch?: string;
@@ -342,7 +343,7 @@ export async function prepare(c: Context) {
       if (!body.url) {
         return c.json({ error: "url is required" }, 400);
       }
-      input = { source: "git", url: body.url, branch: body.branch };
+      input = { source: "git", url: body.url, branch: body.branch, provider: body.provider };
     } else if (source === "local") {
       if (env.CLOUD_MODE) {
         return c.json({ error: "Local projects are not available in cloud mode" }, 403);

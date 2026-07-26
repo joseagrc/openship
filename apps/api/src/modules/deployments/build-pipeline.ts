@@ -4,6 +4,7 @@ import { posix as pathPosix } from "node:path";
 import { repos, type Project, type Deployment, type Domain } from "@repo/db";
 import {
   BUILD_ENV_VARS,
+  isGitHubProvider,
   safeErrorMessage,
 } from "@repo/core";
 import type {
@@ -533,6 +534,7 @@ async function executeBuildAndDeploy(project: Project, dep: Deployment, buildSes
     // decides where the clone runs, the credential purpose that follows from that,
     // and desktop-relay eligibility. The desktop relay (reverse tunnel; nothing
     // persisted) is opted into per deploy via snapshot.forwardGitCredentials.
+    const repoIsGithub = isGitHubProvider(project.gitProvider);
     const clonePlan = resolveClonePlan({
       effectiveTarget: resolved.effectiveTarget,
       serverId: resolved.serverId,
@@ -541,7 +543,7 @@ async function executeBuildAndDeploy(project: Project, dep: Deployment, buildSes
       buildStrategy,
       isDesktop: plat.target === "desktop",
       forwardGitCredentials: snapshot.forwardGitCredentials,
-      repoIsGithub: !!project.gitOwner,
+      repoIsGithub,
     });
     const cloneOnServer = clonePlan.runsOnServer;
     // The relay needs a real SSH reverse tunnel — `reverseForward` exists on every
@@ -574,8 +576,8 @@ async function executeBuildAndDeploy(project: Project, dep: Deployment, buildSes
             label: "build:resolve-git-token",
           }),
           projectId: project.id,
-          owner: project.gitOwner ?? undefined,
-          repo: project.gitRepo ?? undefined,
+          owner: repoIsGithub ? (project.gitOwner ?? undefined) : undefined,
+          repo: repoIsGithub ? (project.gitRepo ?? undefined) : undefined,
           buildStrategy: clonePlan.cloneBuildStrategy,
           // Only meaningful for an on-server clone — lets a per-server GitHub auth
           // config (device token / PAT / SSH key) win for that server.
