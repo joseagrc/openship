@@ -17,36 +17,114 @@ const r = secureRouter(new Hono(), {
   basePath: "/api/settings",
 });
 
-
 // `settings` is an org-singleton resource (declared in
 // ORG_SINGLETON_RESOURCES). The middleware automatically passes
 // resourceId="*" and resolves the org context from the X-Organization-Id
 // header or session default — no per-route id mapping needed.
 
 /** GET  /            - get current org's workspace settings */
-r.get("/", { tag: "settings:read", mcp: { description: "Get the org's workspace settings (build mode, deploy defaults, preferences)." } }, ctrl.get);
+r.get(
+  "/",
+  {
+    tag: "settings:read",
+    mcp: {
+      description: "Get the org's workspace settings (build mode, deploy defaults, preferences).",
+    },
+  },
+  ctrl.get,
+);
 
 /** PUT  /            - create or update workspace settings */
 r.put("/", { tag: "settings:write" }, ctrl.upsert);
 
 /** PATCH /build-mode - update only build mode preference */
-r.patch("/build-mode", { tag: "settings:write", mcp: { description: "Set the default build mode (server / local)." } }, ctrl.updateBuildMode);
+r.patch(
+  "/build-mode",
+  { tag: "settings:write", mcp: { description: "Set the default build mode (server / local)." } },
+  ctrl.updateBuildMode,
+);
 
 /** PATCH /route-strategy - update only the edge→app route strategy default */
-r.patch("/route-strategy", { tag: "settings:write", mcp: { description: "Set the default edge→app route strategy (auto / loopback-port / container-ip)." } }, ctrl.updateRouteStrategy);
+r.patch(
+  "/route-strategy",
+  {
+    tag: "settings:write",
+    mcp: {
+      description: "Set the default edge→app route strategy (auto / loopback-port / container-ip).",
+    },
+  },
+  ctrl.updateRouteStrategy,
+);
 
 /** PATCH /deploy-defaults - set/clear the default deploy target + server */
-r.patch("/deploy-defaults", { tag: "settings:write", mcp: { description: "Set/clear the default deploy target (local/server/cloud) and server." } }, ctrl.updateDeployDefaults);
+r.patch(
+  "/deploy-defaults",
+  {
+    tag: "settings:write",
+    mcp: { description: "Set/clear the default deploy target (local/server/cloud) and server." },
+  },
+  ctrl.updateDeployDefaults,
+);
 
 /** PATCH /clone-credentials - set/clear the user-global git clone token */
 r.patch("/clone-credentials", { tag: "settings:write" }, ctrl.updateCloneCredentials);
 
 /** PATCH /clone-strategy-preference - save the first-time deploy nudge choice */
-r.patch("/clone-strategy-preference", { tag: "settings:write", mcp: { description: "Set the default clone strategy (api-host / server)." } }, ctrl.updateCloneStrategyPreference);
-r.patch("/transfer", { tag: "settings:write", mcp: { description: "Set the default volume-transfer mode (auto/stream/direct/rsync) and compression (auto/zstd/gzip/none) for migrations." } }, ctrl.updateTransferPrefs);
+r.patch(
+  "/clone-strategy-preference",
+  {
+    tag: "settings:write",
+    mcp: { description: "Set the default clone strategy (api-host / server)." },
+  },
+  ctrl.updateCloneStrategyPreference,
+);
+r.patch(
+  "/transfer",
+  {
+    tag: "settings:write",
+    mcp: {
+      description:
+        "Set the default volume-transfer mode (auto/stream/direct/rsync) and compression (auto/zstd/gzip/none) for migrations.",
+    },
+  },
+  ctrl.updateTransferPrefs,
+);
+
+/** GET/PATCH /update-source - instance release/advisory/image source overrides */
+r.get(
+  "/update-source",
+  {
+    tag: "settings:read",
+    mcp: {
+      description:
+        "Get the self-hosted update source overrides and effective release/image source.",
+    },
+  },
+  ctrl.getUpdateSource,
+);
+r.patch(
+  "/update-source",
+  {
+    tag: "settings:write",
+    mcp: {
+      description:
+        "Set self-hosted update source overrides for repo, branch, channel, registry, and version.",
+    },
+  },
+  ctrl.updateUpdateSource,
+);
 
 /** GET /webhook-deliveries - org-wide webhook delivery feed (incl forwarded/unmatched GitHub pushes) */
-r.get("/webhook-deliveries", { tag: "settings:read", mcp: { description: "List the org's webhook delivery feed, including pushes forwarded to Cloud or from unmanaged repos (paginated)." } }, orgDeliveries);
+r.get(
+  "/webhook-deliveries",
+  {
+    tag: "settings:read",
+    mcp: {
+      description:
+        "List the org's webhook delivery feed, including pushes forwarded to Cloud or from unmanaged repos (paginated).",
+    },
+  },
+  orgDeliveries,
+);
 
 export const settingsRoutes = r.hono;
-

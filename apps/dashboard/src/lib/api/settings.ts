@@ -1,5 +1,6 @@
 import { api } from "./client";
 import { endpoints } from "./endpoints";
+import type { UpdateSourceConfig } from "@repo/core";
 
 export type BuildMode = "auto" | "server" | "local";
 export type DefaultDeployTarget = "local" | "server" | "cloud";
@@ -30,6 +31,20 @@ export interface DeployDefaultsResponse {
   defaultServerId: string | null;
 }
 
+export interface UpdateSourceOverrides {
+  repo: string | null;
+  branch: string | null;
+  channel: "release" | "docker" | "source" | null;
+  imageRegistry: string | null;
+  version: string | null;
+}
+
+export interface UpdateSourceSettingsResponse {
+  overrides: UpdateSourceOverrides;
+  effective: UpdateSourceConfig;
+  envDefaults: UpdateSourceConfig;
+}
+
 export const settingsApi = {
   /** Get the current user's platform settings */
   get: () => api.get<UserSettingsResponse>(endpoints.settings.get),
@@ -44,7 +59,9 @@ export const settingsApi = {
 
   /** Update only the default edge→app route strategy */
   updateRouteStrategy: (routeStrategy: RouteStrategy) =>
-    api.patch<{ routeStrategy: RouteStrategy }>(endpoints.settings.routeStrategy, { routeStrategy }),
+    api.patch<{ routeStrategy: RouteStrategy }>(endpoints.settings.routeStrategy, {
+      routeStrategy,
+    }),
 
   /**
    * Update (or clear) the default deploy target.
@@ -74,4 +91,9 @@ export const settingsApi = {
       endpoints.settings.cloneStrategyPreference,
       { preference },
     ),
+
+  getUpdateSource: () => api.get<UpdateSourceSettingsResponse>(endpoints.settings.updateSource),
+
+  updateUpdateSource: (data: Partial<UpdateSourceOverrides>) =>
+    api.patch<UpdateSourceSettingsResponse>(endpoints.settings.updateSource, data),
 };

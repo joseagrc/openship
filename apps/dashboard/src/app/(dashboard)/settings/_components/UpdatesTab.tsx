@@ -8,10 +8,20 @@
  */
 
 import { useCallback, useEffect, useState } from "react";
-import { RefreshCw, ShieldCheck, Download, Github, CheckCircle2, Loader2 } from "lucide-react";
+import {
+  RefreshCw,
+  ShieldCheck,
+  Download,
+  Github,
+  CheckCircle2,
+  Loader2,
+  Save,
+} from "lucide-react";
 import { SettingsSection } from "./SettingsSection";
 import { useUpdates } from "@/components/updates/useUpdates";
 import { useI18n, interpolate } from "@/components/i18n-provider";
+import { getApiErrorMessage } from "@/lib/api/client";
+import { settingsApi, type UpdateSourceOverrides } from "@/lib/api/settings";
 
 function Toggle({
   checked,
@@ -60,6 +70,16 @@ export function UpdatesTab() {
     useUpdates();
   const [autoUpdate, setAutoUpdate] = useState(false);
   const [checking, setChecking] = useState(false);
+  const [sourceForm, setSourceForm] = useState<UpdateSourceOverrides>({
+    repo: null,
+    branch: null,
+    channel: null,
+    imageRegistry: null,
+    version: null,
+  });
+  const [sourceSaving, setSourceSaving] = useState(false);
+  const [sourceMessage, setSourceMessage] = useState<string | null>(null);
+  const [sourceError, setSourceError] = useState<string | null>(null);
   const releasesUrl = updateSource?.releasesUrl ?? "https://github.com/oblien/openship/releases";
   const repoUrl = updateSource?.repoUrl ?? "https://github.com/oblien/openship";
   const repoLabel = `github.com/${updateSource?.repo ?? "oblien/openship"}`;
@@ -72,6 +92,20 @@ export function UpdatesTab() {
       .catch(() => {});
   }, [desktop]);
 
+  useEffect(() => {
+    let alive = true;
+    settingsApi
+      .getUpdateSource()
+      .then((res) => {
+        if (!alive) return;
+        setSourceForm(res.overrides);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, []);
+
   const toggleAuto = useCallback((v: boolean) => {
     setAutoUpdate(v);
     void window.desktop?.config?.set("autoUpdate", v);
@@ -82,6 +116,27 @@ export function UpdatesTab() {
     refresh();
     setTimeout(() => setChecking(false), 1200);
   }, [refresh]);
+
+  const setSourceField = useCallback((key: keyof UpdateSourceOverrides, value: string) => {
+    setSourceForm((cur) => ({ ...cur, [key]: value.trim() ? value : null }));
+    setSourceMessage(null);
+    setSourceError(null);
+  }, []);
+
+  const saveUpdateSource = useCallback(async () => {
+    setSourceSaving(true);
+    setSourceMessage(null);
+    setSourceError(null);
+    try {
+      await settingsApi.updateUpdateSource(sourceForm);
+      setSourceMessage("Saved. Reloading update source...");
+      setTimeout(() => window.location.reload(), 500);
+    } catch (err) {
+      setSourceError(getApiErrorMessage(err, "Could not save update source"));
+    } finally {
+      setSourceSaving(false);
+    }
+  }, [sourceForm]);
 
   const upToDate = state && !state.updateAvailable;
 
@@ -176,6 +231,95 @@ export function UpdatesTab() {
           <Github className="size-3.5" />
           {t.settings.updates.viewChangelog}
         </a>
+      </SettingsSection>
+
+      <SettingsSection
+        icon={Github}
+        title="Update Source"
+        description="Choose where this self-hosted instance checks releases, advisories, and Docker images."
+      >
+        <div className="grid gap-4 md:grid-cols-2">
+          <label className="space-y-1.5">
+            <span className="text-[12px] font-medium text-muted-foreground">GitHub repo</span>
+            <input
+              value={sourceForm.repo ?? ""}
+              onChange={(e) => setSourceField("repo", e.target.value)}
+              placeholder="oblien/openship"
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-[12px] font-medium text-muted-foreground">Branch</span>
+            <input
+              value={sourceForm.branch ?? ""}
+              onChange={(e) => setSourceField("branch", e.target.value)}
+              placeholder="main"
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
+            />
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-[12px] font-medium text-muted-foreground">Update channel</span>
+            <select
+              value={sourceForm.channel ?? ""}
+              onChange={(e) => setSourceField("channel", e.target.value)}
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
+            >
+              <option value="">Use server default</option>
+              <option value="release">Release</option>
+              <option value="docker">Docker</option>
+              <option value="source">Source</option>
+            </select>
+          </label>
+          <label className="space-y-1.5">
+            <span className="text-[12px] font-medium text-muted-foreground">Docker registry</span>
+            <input
+              value={sourceForm.imageRegistry ?? ""}
+              onChange={(e) => setSourceField("imageRegistry", e.target.value)}
+              placeholder="ghcr.io/oblien"
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
+            />
+          </label>
+          <label className="space-y-1.5 md:col-span-2">
+            <span className="text-[12px] font-medium text-muted-foreground">
+              Version / image tag
+            </span>
+            <input
+              value={sourceForm.version ?? ""}
+              onChange={(e) => setSourceField("version", e.target.value)}
+              placeholder="latest, main, or v0.3.1"
+              className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
+            />
+          </label>
+        </div>
+
+        <div className="mt-4 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-[12.5px] text-muted-foreground">
+          Effective source:{" "}
+          <span className="font-medium text-foreground">
+            {updateSource?.repo ?? "oblien/openship"}
+          </span>{" "}
+          · {updateSource?.channel ?? "release"} · {updateSource?.imageRegistry ?? "ghcr.io/oblien"}
+          {updateSource?.version ? `:${updateSource.version}` : ""}
+        </div>
+
+        <div className="mt-4 flex items-center justify-between gap-3">
+          <div className="min-h-5 text-[12.5px]">
+            {sourceError && <span className="text-destructive">{sourceError}</span>}
+            {sourceMessage && <span className="text-success">{sourceMessage}</span>}
+          </div>
+          <button
+            type="button"
+            onClick={saveUpdateSource}
+            disabled={sourceSaving}
+            className="inline-flex items-center gap-1.5 rounded-lg bg-foreground px-3 py-1.5 text-[13px] font-medium text-background transition-opacity hover:opacity-90 disabled:opacity-60"
+          >
+            {sourceSaving ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : (
+              <Save className="size-3.5" />
+            )}
+            Save source
+          </button>
+        </div>
       </SettingsSection>
 
       {/* Security disclosure */}

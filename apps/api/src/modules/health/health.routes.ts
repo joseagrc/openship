@@ -75,6 +75,15 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
   let teamMode: string = "single_user";
   let migrationTargetUrl: string | null = null;
   let migrationInProgress: boolean = false;
+  let updateSourceSettings:
+    | {
+        updateRepo?: string | null;
+        updateBranch?: string | null;
+        updateChannel?: string | null;
+        updateImageRegistry?: string | null;
+        updateVersion?: string | null;
+      }
+    | undefined;
 
   if (env.DEPLOY_MODE === "desktop") {
     // Desktop: authMode is set during onboarding (none or cloud)
@@ -85,6 +94,7 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
       teamMode = settings?.teamMode ?? "single_user";
       migrationTargetUrl = settings?.migrationTargetUrl ?? null;
       migrationInProgress = settings?.migrationInProgress ?? false;
+      updateSourceSettings = settings;
     } catch {
       authMode = "none";
     }
@@ -103,6 +113,7 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
       teamMode = settings?.teamMode ?? "single_user";
       migrationTargetUrl = settings?.migrationTargetUrl ?? null;
       migrationInProgress = settings?.migrationInProgress ?? false;
+      updateSourceSettings = settings;
     } catch {
       // settings table may be unavailable mid-migration; defaults are safe.
     }
@@ -129,11 +140,11 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
     cloudAuthUrl: cloudRuntimeTarget.dashboard,
     cloudApiUrl: cloudRuntimeTarget.api,
     updateSource: updateSourceConfig({
-      repo: env.OPENSHIP_UPDATE_REPO,
-      branch: env.OPENSHIP_UPDATE_BRANCH,
-      channel: env.OPENSHIP_UPDATE_CHANNEL,
-      imageRegistry: env.OPENSHIP_IMAGE_REGISTRY,
-      version: env.OPENSHIP_VERSION ?? APP_VERSION,
+      repo: updateSourceSettings?.updateRepo || env.OPENSHIP_UPDATE_REPO,
+      branch: updateSourceSettings?.updateBranch || env.OPENSHIP_UPDATE_BRANCH,
+      channel: updateSourceSettings?.updateChannel || env.OPENSHIP_UPDATE_CHANNEL,
+      imageRegistry: updateSourceSettings?.updateImageRegistry || env.OPENSHIP_IMAGE_REGISTRY,
+      version: updateSourceSettings?.updateVersion || env.OPENSHIP_VERSION || APP_VERSION,
     }),
     ...(machineName && { machineName }),
     ...(env.HOST_DOMAIN && { hostDomain: env.HOST_DOMAIN }),

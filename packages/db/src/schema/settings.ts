@@ -1,11 +1,4 @@
-import {
-  pgTable,
-  text,
-  timestamp,
-  integer,
-  boolean,
-  jsonb,
-} from "drizzle-orm/pg-core";
+import { pgTable, text, timestamp, integer, boolean, jsonb } from "drizzle-orm/pg-core";
 import { user } from "./auth";
 
 // ─── Instance Settings ───────────────────────────────────────────────────────
@@ -64,9 +57,7 @@ export const instanceSettings = pgTable("instance_settings", {
    * deployments can flip this to "cloud" to keep delivery routed
    * through the central relay.
    */
-  invitationMailSource: text("invitation_mail_source")
-    .notNull()
-    .default("platform"),
+  invitationMailSource: text("invitation_mail_source").notNull().default("platform"),
 
   // ── Team-mode migration ────────────────────────────────────────────────────
   //
@@ -140,6 +131,17 @@ export const instanceSettings = pgTable("instance_settings", {
   smtpPasswordEncrypted: text("smtp_password_encrypted"),
   /** From header, e.g. "Openship <no-reply@example.com>". Falls back to smtpUser. */
   smtpFrom: text("smtp_from"),
+
+  // ── Self-hosted update source ──────────────────────────────────────────────
+  //
+  // Optional operator overrides for where this instance checks releases,
+  // advisories, and Docker images. Null means "use the process environment",
+  // which itself falls back to the upstream Openship defaults.
+  updateRepo: text("update_repo"),
+  updateBranch: text("update_branch"),
+  updateChannel: text("update_channel"),
+  updateImageRegistry: text("update_image_registry"),
+  updateVersion: text("update_version"),
 
   // ── Timestamps ─────────────────────────────────────────────────────────────
 

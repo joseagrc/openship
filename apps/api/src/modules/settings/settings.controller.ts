@@ -4,6 +4,9 @@ import { audit, auditContextFrom } from "../../lib/audit";
 import { repos } from "@repo/db";
 import { randomBytes } from "node:crypto";
 import { encrypt } from "../../lib/encryption";
+import { updateSourceConfig, type UpdateSourceConfig } from "@repo/core";
+import { APP_VERSION } from "../../lib/app-version";
+import { env } from "../../config/env";
 import {
   getBuildMode,
   getDeployDefaults,
@@ -20,9 +23,50 @@ const VALID_CLONE_STRATEGY_PREFERENCES = ["prompt", "local", "remote-with-token"
 type CloneStrategyPreference = (typeof VALID_CLONE_STRATEGY_PREFERENCES)[number];
 
 const VALID_MODES: BuildMode[] = ["auto", "server", "local"];
+const VALID_UPDATE_CHANNELS = ["release", "docker", "source"] as const;
+type UpdateChannel = (typeof VALID_UPDATE_CHANNELS)[number];
 
 function generateId() {
   return "us_" + randomBytes(12).toString("base64url");
+}
+
+function cleanOptional(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+function effectiveUpdateSource(settings?: {
+  updateRepo?: string | null;
+  updateBranch?: string | null;
+  updateChannel?: string | null;
+  updateImageRegistry?: string | null;
+  updateVersion?: string | null;
+}): UpdateSourceConfig {
+  return updateSourceConfig({
+    repo: settings?.updateRepo || env.OPENSHIP_UPDATE_REPO,
+    branch: settings?.updateBranch || env.OPENSHIP_UPDATE_BRANCH,
+    channel: settings?.updateChannel || env.OPENSHIP_UPDATE_CHANNEL,
+    imageRegistry: settings?.updateImageRegistry || env.OPENSHIP_IMAGE_REGISTRY,
+    version: settings?.updateVersion || env.OPENSHIP_VERSION || APP_VERSION,
+  });
+}
+
+function updateSourceOverrides(settings?: {
+  updateRepo?: string | null;
+  updateBranch?: string | null;
+  updateChannel?: string | null;
+  updateImageRegistry?: string | null;
+  updateVersion?: string | null;
+}) {
+  return {
+    repo: settings?.updateRepo ?? null,
+    branch: settings?.updateBranch ?? null,
+    channel: settings?.updateChannel ?? null,
+    imageRegistry: settings?.updateImageRegistry ?? null,
+    version: settings?.updateVersion ?? null,
+  };
 }
 
 /** GET / - return platform settings for the authenticated user */
@@ -81,7 +125,8 @@ async function getCloneCredentialsState(userId: string) {
       setAt: settings?.cloneTokenSetAt?.toISOString() ?? null,
       asDefault: settings?.cloneTokenAsDefault ?? false,
     },
-    cloneStrategyPreference: (settings?.cloneStrategyPreference ?? "prompt") as CloneStrategyPreference,
+    cloneStrategyPreference: (settings?.cloneStrategyPreference ??
+      "prompt") as CloneStrategyPreference,
   };
 }
 
@@ -165,9 +210,12 @@ export async function updateDeployDefaults(c: Context) {
   const body = await c.req.json().catch(() => ({}));
 
   const rawTarget = body?.defaultDeployTarget;
-  const target = rawTarget === null || rawTarget === undefined
-    ? null
-    : (isValidDefaultDeployTarget(rawTarget) ? rawTarget : "__invalid__");
+  const target =
+    rawTarget === null || rawTarget === undefined
+      ? null
+      : isValidDefaultDeployTarget(rawTarget)
+        ? rawTarget
+        : "__invalid__";
 
   if (target === "__invalid__") {
     return c.json(
@@ -358,7 +406,12 @@ export async function updateTransferPrefs(c: Context) {
 
   const existing = await repos.settings.findByUser(ctx.userId);
   if (!existing) {
-    await repos.settings.upsert({ id: generateId(), userId: ctx.userId, buildMode: "auto", ...patch });
+    await repos.settings.upsert({
+      id: generateId(),
+      userId: ctx.userId,
+      buildMode: "auto",
+      ...patch,
+    });
   } else {
     await repos.settings.update(ctx.userId, patch);
   }
@@ -369,4 +422,48 @@ export async function updateTransferPrefs(c: Context) {
     after: { action: "transferPrefs.set", ...patch },
   });
   return c.json(await getTransferPrefs(ctx.userId));
+}
+
+/** GET /update-source - instance-level release/image source configuration. */
+export async function getUpdateSource(c: Context) {
+  const settings = await repos.instanceSettings.get().catch(() => undefined);
+  return c.json({
+    overrides: updateSourceOverrides(settings),
+    effective: effectiveUpdateSource(settings),
+    envDefaults: effectiveUpdateSource(),
+  });
+}
+
+/** PATCH /update-source - update instance-level release/image source overrides. */
+export async function updateUpdateSource(c: Context) {
+  const ctx = getRequestContext(c);
+  const body = await c.req.json().catch(() => ({}));
+
+  const channel = cleanOptional(body?.channel);
+  if (channel && !VALID_UPDATE_CHANNELS.includes(channel as UpdateChannel)) {
+    return c.json({ error: "channel must be one of: release, docker, source" }, 400);
+  }
+
+  const patch = {
+    updateRepo: cleanOptional(body?.repo),
+    updateBranch: cleanOptional(body?.branch),
+    updateChannel: channel,
+    updateImageRegistry: cleanOptional(body?.imageRegistry),
+    updateVersion: cleanOptional(body?.version),
+  };
+
+  const row = await repos.instanceSettings.upsert(patch);
+
+  audit.recordAsync(auditContextFrom(c, ctx.organizationId, ctx.userId), {
+    eventType: "settings.updated",
+    resourceType: "settings",
+    resourceId: "instance",
+    after: { action: "updateSource.set", overrides: updateSourceOverrides(row) },
+  });
+
+  return c.json({
+    overrides: updateSourceOverrides(row),
+    effective: effectiveUpdateSource(row),
+    envDefaults: effectiveUpdateSource(),
+  });
 }
