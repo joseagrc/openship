@@ -16,6 +16,7 @@ import {
   Loader2,
   FilePlus2,
   Trash2,
+  Pencil,
 } from "lucide-react";
 
 import { DomainSettings } from "../components/DomainSettings";
@@ -54,7 +55,7 @@ const branchToEnvironmentName = (branch: string) =>
     .join(" ") || branch;
 
 const EnvironmentSwitcher = () => {
-  const { projectData, environments, createEnvironment, activeTab } = useProjectSettings();
+  const { projectData, environments, createEnvironment, updateProjectEnvironment, activeTab } = useProjectSettings();
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -69,6 +70,9 @@ const EnvironmentSwitcher = () => {
   const [manualMode, setManualMode] = useState(false);
   const [manualEnvironmentName, setManualEnvironmentName] = useState("");
   const [manualBranch, setManualBranch] = useState("");
+  const [editingEnvironmentId, setEditingEnvironmentId] = useState<string | null>(null);
+  const [editingBranch, setEditingBranch] = useState("");
+  const [savingEnvironmentId, setSavingEnvironmentId] = useState<string | null>(null);
   const [branchesLoadedForProject, setBranchesLoadedForProject] = useState<string | null>(null);
   const branchRequestId = useRef(0);
 
@@ -111,6 +115,9 @@ const EnvironmentSwitcher = () => {
     setBranchQuery("");
     setManualEnvironmentName("");
     setManualBranch("");
+    setEditingEnvironmentId(null);
+    setEditingBranch("");
+    setSavingEnvironmentId(null);
     setCreatingBranch(null);
     setLoadingBranches(false);
   }, []);
@@ -122,6 +129,9 @@ const EnvironmentSwitcher = () => {
     setBranchQuery(branchSeed ?? "");
     setManualEnvironmentName("");
     setManualBranch("");
+    setEditingEnvironmentId(null);
+    setEditingBranch("");
+    setSavingEnvironmentId(null);
     setCreatingBranch(null);
   }, []);
 
@@ -278,6 +288,30 @@ const EnvironmentSwitcher = () => {
     }
   };
 
+  const startEditEnvironment = (env: { id: string; gitBranch?: string }) => {
+    setEditingEnvironmentId(env.id);
+    setEditingBranch(env.gitBranch || "");
+  };
+
+  const handleSaveEnvironmentBranch = async () => {
+    const environmentId = editingEnvironmentId;
+    const gitBranch = editingBranch.trim();
+    if (!environmentId || !gitBranch || savingEnvironmentId) return;
+
+    setSavingEnvironmentId(environmentId);
+    try {
+      await updateProjectEnvironment(environmentId, { gitBranch });
+      showToast(t.projects.env.branchUpdated, "success", t.projects.env.toastEnvironmentTitle);
+      setEditingEnvironmentId(null);
+      setEditingBranch("");
+    } catch (error) {
+      const message = error instanceof Error ? error.message : t.projects.env.failedUpdateEnvironment;
+      showToast(message, "error", t.projects.env.toastEnvironmentTitle);
+    } finally {
+      setSavingEnvironmentId(null);
+    }
+  };
+
   return (
     <DismissiblePopover
       open={isOpen || isAdding}
@@ -327,33 +361,80 @@ const EnvironmentSwitcher = () => {
               const active = env.id === projectData.id;
 
               return (
-                <button
+                <div
                   key={env.id}
-                  type="button"
-                  onClick={() => handleSwitch(env.id)}
                   className="flex w-full items-center justify-between gap-3 rounded-md px-3 py-2 text-start transition-colors hover:bg-muted/50"
                 >
-                  <span className="min-w-0">
-                    <span className="block truncate text-sm font-medium text-foreground">{env.name}</span>
-                    {env.isApp ? (
-                      env.version ? (
+                  <button
+                    type="button"
+                    onClick={() => handleSwitch(env.id)}
+                    className="flex min-w-0 flex-1 items-center justify-between gap-3 text-start"
+                  >
+                    <span className="min-w-0">
+                      <span className="block truncate text-sm font-medium text-foreground">{env.name}</span>
+                      {env.isApp ? (
+                        env.version ? (
+                          <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
+                            <Tag className="size-3" />
+                            <span className="truncate">{env.version}</span>
+                          </span>
+                        ) : null
+                      ) : (
                         <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                          <Tag className="size-3" />
-                          <span className="truncate">{env.version}</span>
+                          <GitBranch className="size-3" />
+                          <span className="truncate">{env.gitBranch}</span>
                         </span>
-                      ) : null
-                    ) : (
-                      <span className="mt-0.5 flex items-center gap-1 text-xs text-muted-foreground">
-                        <GitBranch className="size-3" />
-                        <span className="truncate">{env.gitBranch}</span>
-                      </span>
-                    )}
-                  </span>
-                  {active && <Check className="size-4 shrink-0 text-primary" />}
-                </button>
+                      )}
+                    </span>
+                    {active && <Check className="size-4 shrink-0 text-primary" />}
+                  </button>
+                  {!env.isApp && (
+                    <button
+                      type="button"
+                      onClick={() => startEditEnvironment(env)}
+                      className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                      aria-label={t.projects.env.editBranch}
+                    >
+                      <Pencil className="size-3.5" />
+                    </button>
+                  )}
+                </div>
               );
             })}
           </div>
+          {editingEnvironmentId && (
+            <div className="border-t border-border/50 p-3">
+              <label className="block space-y-1.5">
+                <span className="text-xs font-medium text-muted-foreground">{t.projects.env.branchLabel}</span>
+                <input
+                  value={editingBranch}
+                  onChange={(event) => setEditingBranch(event.target.value)}
+                  className="w-full rounded-lg border border-border/50 bg-background px-3 py-2 text-sm outline-none transition-colors focus:border-primary/40"
+                />
+              </label>
+              <div className="mt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setEditingEnvironmentId(null);
+                    setEditingBranch("");
+                  }}
+                  className="rounded-md px-3 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted/50 hover:text-foreground"
+                >
+                  {t.projects.env.cancel}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSaveEnvironmentBranch}
+                  disabled={!editingBranch.trim() || !!savingEnvironmentId}
+                  className="inline-flex items-center gap-2 rounded-md bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                >
+                  {savingEnvironmentId ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                  {t.projects.env.saveBranch}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

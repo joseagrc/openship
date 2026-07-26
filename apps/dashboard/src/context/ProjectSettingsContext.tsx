@@ -207,6 +207,15 @@ interface ProjectSettingsContextType {
     gitBranch?: string;
     sourceMode?: "branch" | "manual";
   }) => Promise<ProjectEnvironment | null>;
+  updateProjectEnvironment: (
+    environmentId: string,
+    input: {
+      environmentName?: string;
+      environmentSlug?: string;
+      environmentType?: "production" | "staging" | "preview" | "development";
+      gitBranch?: string;
+    },
+  ) => Promise<ProjectEnvironment | null>;
   domain: string;
   /** Shared domain selection driving the overview URL + analytics (multi-domain projects). */
   selectedDomain: string;
@@ -664,6 +673,37 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
     [id, refreshEnvironments],
   );
 
+  const updateProjectEnvironment = useCallback(
+    async (
+      environmentId: string,
+      input: {
+        environmentName?: string;
+        environmentSlug?: string;
+        environmentType?: "production" | "staging" | "preview" | "development";
+        gitBranch?: string;
+      },
+    ) => {
+      if (!id) return null;
+      const response = await projectsApi.updateEnvironment(id, environmentId, input);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || "Failed to update environment");
+      }
+      const updated = response.data as ProjectEnvironment;
+      setEnvironments((prev) => prev.map((env) => (env.id === updated.id ? updated : env)));
+      if (updated.id === projectData.id) {
+        setProjectData((prev) => ({
+          ...prev,
+          environmentName: updated.name,
+          environmentSlug: updated.slug,
+          environmentType: updated.type,
+          gitBranch: updated.gitBranch,
+        }));
+      }
+      return updated;
+    },
+    [id, projectData.id],
+  );
+
   // Terminal Logs Management
   const MAX_TERMINAL_LOGS = 1000;
 
@@ -903,6 +943,7 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
       id,
       environments,
       createEnvironment,
+      updateProjectEnvironment,
       domain,
       selectedDomain,
       setSelectedDomain,
@@ -940,6 +981,7 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
       id,
       environments,
       createEnvironment,
+      updateProjectEnvironment,
       domain,
       selectedDomain,
       slug,

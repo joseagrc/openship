@@ -413,6 +413,18 @@ async function resolveProjectBranch(ctx: RequestContext, project: Project, branc
   return "main";
 }
 
+function normalizeProjectEnvironment(project: Project): "production" | "staging" | "development" {
+  return normalizeEnvironment(project.environmentType || project.environmentSlug || "production");
+}
+
+async function resolveProjectForEnvironment(project: Project, environment: string): Promise<Project> {
+  const normalized = normalizeEnvironment(environment);
+  if (normalizeProjectEnvironment(project) === normalized) return project;
+
+  const siblings = await repos.project.listByGroup(project.groupId);
+  return siblings.find((row) => normalizeProjectEnvironment(row) === normalized) ?? project;
+}
+
 /**
  * Re-parse the repo's current docker-compose and 3-way reconcile it against the
  * stored service rows (repos.service.reconcileFromCompose): services the user
@@ -1383,10 +1395,15 @@ export async function triggerDeployment(
     releaseVersion?: string;
   },
 ) {
-  const project = await repos.project.findById(data.projectId);
+  let project = await repos.project.findById(data.projectId);
   if (!project) {
     throw new NotFoundError("Project", data.projectId);
   }
+  const environment = normalizeEnvironment(
+    data.environment || project.environmentType || project.environmentSlug,
+  );
+  project = await resolveProjectForEnvironment(project, environment);
+
   // The Openship control plane IS the running host service, not a redeployable
   // workload — it updates itself via the CLI. It's a release-provider project, so
   // the git/localPath 403 below would NOT catch it; guard it explicitly.
@@ -1413,7 +1430,6 @@ export async function triggerDeployment(
   }
 
   const branch = await resolveProjectBranch(ctx, project, data.branch);
-  const environment = normalizeEnvironment(data.environment);
 
   // Skip an auto (webhook) deploy whose commit is already in-flight or live —
   // closes the App + repo-webhook double-deploy window. Manual/forceAll bypass.

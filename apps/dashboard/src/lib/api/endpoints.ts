@@ -17,6 +17,8 @@ export const endpoints = {
     import: "projects/import",
     info: (id: string | number) => `projects/${id}/info`,
     environments: (id: string | number) => `projects/${id}/environments`,
+    environment: (id: string | number, environmentId: string | number) =>
+      `projects/${id}/environments/${environmentId}`,
     options: (id: string | number) => `projects/${id}/options`,
     portCheck: (id: string | number) => `projects/${id}/port-check`,
     outputCheck: (id: string | number) => `projects/${id}/output-check`,

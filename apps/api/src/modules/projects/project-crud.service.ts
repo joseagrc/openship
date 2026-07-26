@@ -1211,6 +1211,69 @@ export async function createProjectEnvironment(
   return environmentSummary(created);
 }
 
+export async function updateProjectEnvironment(
+  projectId: string,
+  environmentId: string,
+  ctx: RequestContext,
+  data: {
+    environmentName?: string;
+    environmentSlug?: string;
+    environmentType?: string;
+    gitBranch?: string;
+  },
+) {
+  const { organizationId } = ctx;
+  const base = await repos.project.findById(projectId);
+  assertResourceInOrg(base, "Project", organizationId, projectId);
+  const target = await repos.project.findById(environmentId);
+  assertResourceInOrg(target, "Project", organizationId, environmentId);
+
+  if (target.groupId !== base.groupId) {
+    throw new NotFoundError("Environment", environmentId);
+  }
+
+  const patch: Partial<NewProject> = {};
+
+  if (data.environmentName !== undefined) {
+    const name = data.environmentName.trim();
+    if (!name) throw new ValidationError("Environment name is required");
+    patch.environmentName = name;
+  }
+
+  if (data.environmentSlug !== undefined) {
+    const slug = normalizeEnvironmentSlug(data.environmentSlug, target.environmentSlug);
+    const sibling = (await repos.project.listByGroup(base.groupId)).find(
+      (row) => row.id !== environmentId && row.environmentSlug === slug,
+    );
+    if (sibling) throw new ConflictError(`Environment "${slug}" already exists`);
+    patch.environmentSlug = slug;
+  }
+
+  if (data.environmentType !== undefined) {
+    patch.environmentType = normalizeEnvironment(data.environmentType);
+  }
+
+  if (data.gitBranch !== undefined) {
+    const gitBranch = data.gitBranch.trim();
+    if (!gitBranch) throw new ValidationError("Git branch is required");
+    if (isGitHubProvider(target.gitProvider) && target.gitOwner && target.gitRepo) {
+      const branches = await listGitHubBranches(ctx, target.gitOwner, target.gitRepo);
+      const exists = branches.some((branch) => branch.name === gitBranch);
+      if (!exists) {
+        throw new ValidationError(`Branch "${gitBranch}" was not found for ${target.gitOwner}/${target.gitRepo}`);
+      }
+    }
+    patch.gitBranch = gitBranch;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await repos.project.update(environmentId, patch);
+  }
+
+  const updated = await repos.project.findById(environmentId);
+  return environmentSummary(updated ?? target);
+}
+
 // ─── Git info ────────────────────────────────────────────────────────────────
 
 /**
@@ -1454,13 +1517,13 @@ export async function getGitInfo(projectId: string, organizationId: string) {
 export async function setBranch(
   projectId: string,
   branch: string,
-  organizationId: string,
+  ctx: RequestContext,
 ) {
   const p = await repos.project.findById(projectId);
-  assertResourceInOrg(p, "Project", organizationId, projectId);
+  assertResourceInOrg(p, "Project", ctx.organizationId, projectId);
 
-  await repos.project.update(projectId, { gitBranch: branch });
-  return { success: true, branch };
+  const updated = await updateProjectEnvironment(projectId, projectId, ctx, { gitBranch: branch });
+  return { success: true, branch: updated.gitBranch };
 }
 
 // ─── Build options ───────────────────────────────────────────────────────────

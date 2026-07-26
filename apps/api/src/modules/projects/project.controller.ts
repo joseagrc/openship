@@ -449,6 +449,36 @@ export async function createEnvironment(c: Context) {
   }
 }
 
+export async function updateEnvironment(c: Context) {
+  const ctx = getRequestContext(c);
+  const { userId, organizationId } = ctx;
+  const id = param(c, "id");
+  const environmentId = param(c, "environmentId");
+  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  const body = await c.req.json();
+
+  try {
+    const data = await projectService.updateProjectEnvironment(id, environmentId, ctx, body);
+    audit.recordAsync(auditContextFrom(c, organizationId, userId), {
+      eventType: "project.updated",
+      resourceType: "project",
+      resourceId: environmentId,
+      after: {
+        action: "environment.updated",
+        environmentId: data.id,
+        environmentName: data.name,
+        environmentSlug: data.slug,
+        environmentType: data.type,
+        gitBranch: data.gitBranch,
+      },
+    });
+    return c.json({ success: true, data });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to update environment";
+    return c.json({ success: false, error: message }, 400);
+  }
+}
+
 export async function update(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
@@ -1725,7 +1755,7 @@ export async function setBranch(c: Context) {
   await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
   const { branch } = await c.req.json<{ branch: string }>();
   if (!branch) return c.json({ error: "branch is required" }, 400);
-  const result = await projectService.setBranch(id, branch, organizationId);
+  const result = await projectService.setBranch(id, branch, ctx);
   audit.recordAsync(auditContextFrom(c, organizationId, userId), {
     eventType: "project.updated",
     resourceType: "project",

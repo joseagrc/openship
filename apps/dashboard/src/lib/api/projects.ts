@@ -181,6 +181,22 @@ export const projectsApi = {
       body,
     ),
 
+  /** Update an environment label, type, or deploy branch */
+  updateEnvironment: (
+    id: string | number,
+    environmentId: string | number,
+    body: {
+      environmentName?: string;
+      environmentSlug?: string;
+      environmentType?: "production" | "staging" | "preview" | "development";
+      gitBranch?: string;
+    },
+  ) =>
+    api.patch<{ success: boolean; data?: any; error?: string }>(
+      endpoints.projects.environment(id, environmentId),
+      body,
+    ),
+
   /** Delete a project app or a single environment.
    *  `wipeVolumes=true` ALSO removes Docker named volumes attached to the
    *  project's containers - destroys persistent data (DBs, caches, etc.).
