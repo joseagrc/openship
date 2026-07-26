@@ -117,6 +117,12 @@ export interface ServerCheckResult {
   missing: string[];
 }
 
+export interface ServerRepairResult {
+  ok: boolean;
+  component: ComponentStatus;
+  logs: string[];
+}
+
 // ─── Edge (port 80/443) preflight ──────────────────────────────────────────────
 
 export type EdgeProxyKind = "nginx" | "caddy" | "apache" | "traefik" | "haproxy" | "openresty";
@@ -331,6 +337,14 @@ export const systemApi = {
       serverId,
       ...(components?.length ? { components } : {}),
     }, { timeout: 30_000 }), // headroom for a cold SSH connect + parallel probes
+
+  /** Repair a supported unhealthy component on a specific server. */
+  repairComponent: (serverId: string, component: string) =>
+    api.post<ServerRepairResult>(
+      endpoints.system.serverRepair(serverId),
+      { component },
+      { timeout: 90_000 },
+    ),
 
   /** Answer a mid-install prompt (e.g. the OpenResty edge-takeover hold) */
   respondInstall: (action: string, sessionId?: string) =>

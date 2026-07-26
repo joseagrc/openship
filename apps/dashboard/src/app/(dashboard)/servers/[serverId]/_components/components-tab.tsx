@@ -7,6 +7,7 @@ import {
   RotateCcw,
   ChevronDown,
   ArrowUpCircle,
+  Wrench,
 } from "lucide-react";
 import { useState, useRef, useEffect } from "react";
 import type {
@@ -32,15 +33,18 @@ function HealthRow({
   running,
   onRunAction,
   onRemoveAction,
+  onRepairAction,
 }: {
   component: ComponentStatus;
   busy: boolean;
   running: boolean;
   onRunAction: (component: ComponentStatus) => void;
   onRemoveAction: (component: ComponentStatus) => void;
+  onRepairAction: (component: ComponentStatus) => void;
 }) {
   const { t } = useI18n();
   const canRunAction = component.installable;
+  const canRepair = component.name === "docker" && component.installed && !component.healthy;
   // A newer package is available → the reinstall action upgrades to it, so lead
   // with "Update" (the same install action, apt-get install pulls the candidate).
   const isUpdate = Boolean(component.updateAvailable && component.installed);
@@ -100,8 +104,22 @@ function HealthRow({
       >
         {component.healthy ? "Healthy" : "Unhealthy"}
       </div>
-      {(canRunAction || (component.removable && component.installed)) && (
+      {(canRepair || canRunAction || (component.removable && component.installed)) && (
         <div className="flex items-center gap-2 shrink-0">
+          {canRepair && (
+            <button
+              onClick={() => onRepairAction(component)}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium rounded-lg border border-warning-border bg-warning-bg text-warning hover:bg-warning-bg transition-colors disabled:opacity-50"
+            >
+              {running ? (
+                <Loader2 className="size-3.5 animate-spin" />
+              ) : (
+                <Wrench className="size-3.5" />
+              )}
+              {running ? t.servers.components.running : t.servers.components.repair}
+            </button>
+          )}
           {canRunAction && (
             <button
               onClick={() => onRunAction(component)}
@@ -153,6 +171,7 @@ export function ComponentsTab({
   onInstallMissing,
   onRunComponentAction,
   onRemoveComponentAction,
+  onRepairComponentAction,
   busy,
   activeActionComponent,
   installDone,
@@ -169,12 +188,13 @@ export function ComponentsTab({
   onInstallMissing: () => void;
   onRunComponentAction: (component: ComponentStatus) => void;
   onRemoveComponentAction: (component: ComponentStatus) => void;
+  onRepairComponentAction: (component: ComponentStatus) => void;
   busy: boolean;
   activeActionComponent: string | null;
   installDone: boolean;
   installFinalStatus: "completed" | "failed" | null;
   installComponents: SetupComponentProgress[];
-  actionMode: "install" | "remove";
+  actionMode: "install" | "remove" | "repair";
   installLogs: SetupLogEvent[];
   onDismissInstall: () => void;
 }) {
@@ -197,12 +217,22 @@ export function ComponentsTab({
         ? t.servers.components.removalComplete
         : t.servers.components.removalFinishedErrors
       : t.servers.components.removing
-    : installDone
-      ? installFinalStatus === "completed"
-        ? t.servers.components.installComplete
-        : t.servers.components.installFinishedErrors
-      : t.servers.components.installing;
-  const progressLogsLabel = actionMode === "remove" ? t.servers.components.removalLogs : t.servers.components.installLogs;
+    : actionMode === "repair"
+      ? installDone
+        ? installFinalStatus === "completed"
+          ? t.servers.components.repairComplete
+          : t.servers.components.repairFinishedErrors
+        : t.servers.components.repairing
+      : installDone
+        ? installFinalStatus === "completed"
+          ? t.servers.components.installComplete
+          : t.servers.components.installFinishedErrors
+        : t.servers.components.installing;
+  const progressLogsLabel = actionMode === "remove"
+    ? t.servers.components.removalLogs
+    : actionMode === "repair"
+      ? t.servers.components.repairLogs
+      : t.servers.components.installLogs;
 
   useEffect(() => {
     if (logsExpanded && logEndRef.current) {
@@ -286,6 +316,7 @@ export function ComponentsTab({
                   running={activeActionComponent === comp.name}
                   onRunAction={onRunComponentAction}
                   onRemoveAction={onRemoveComponentAction}
+                  onRepairAction={onRepairComponentAction}
                 />
               ))}
               {infraComponents.length > 0 && (
@@ -305,6 +336,7 @@ export function ComponentsTab({
                       running={activeActionComponent === comp.name}
                       onRunAction={onRunComponentAction}
                       onRemoveAction={onRemoveComponentAction}
+                      onRepairAction={onRepairComponentAction}
                     />
                   ))}
                 </>

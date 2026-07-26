@@ -246,6 +246,7 @@ export const endpoints = {
     serverReachability: (id: string) => `system/servers/${id}/reachability`,
     serverRateLimit: (id: string) => `system/servers/${id}/rate-limit`,
     serverPortsScan: (id: string) => `system/servers/${id}/ports/scan`,
+    serverRepair: (id: string) => `system/servers/${id}/repair`,
     // Native-module versioning + migration (OpenResty, …)
     serverModules: (id: string) => `system/servers/${id}/modules`,
     serverModulesScan: (id: string) => `system/servers/${id}/modules/scan`,

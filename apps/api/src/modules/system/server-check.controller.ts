@@ -63,6 +63,8 @@ const ALLOWED_COMPONENTS = new Set(
 
 const REMOVABLE_COMPONENTS = new Set(Object.keys(COMPONENT_UNINSTALLERS));
 
+const REPAIRABLE_COMPONENTS = new Set(["docker"]);
+
 async function withCapabilities<T extends { name: string; installed?: boolean }>(
   executor: CommandExecutor,
   components: T[],
@@ -337,6 +339,101 @@ export async function checkServer(c: Context) {
     }
     return c.json({ error: "connection_failed", message }, 502);
   }
+}
+
+/**
+ * POST /system/servers/:id/repair
+ *
+ * Run a bounded, idempotent repair for a known unhealthy system component.
+ * Body: { component: "docker" }
+ */
+export async function repairServerComponent(c: Context) {
+  if (env.CLOUD_MODE) return c.json({ error: "Not available" }, 404);
+
+  const serverId = c.req.param("id")!;
+  const body = await c.req.json().catch(() => ({}));
+  const componentName = body.component as string | undefined;
+
+  if (!componentName || !REPAIRABLE_COMPONENTS.has(componentName)) {
+    return c.json({ error: "Invalid or unsupported component name" }, 400);
+  }
+
+  getRequestContext(c);
+  await permission.assert(getRequestContext(c), { resourceType: "server", resourceId: serverId, action: "admin" });
+
+  try {
+    // Explicit repair must get a fresh shot even if a prior scan tripped the
+    // SSH cooldown. The repair path itself will record a new success/failure.
+    sshManager.invalidate(serverId);
+
+    const logs: string[] = [];
+    const status = await sshManager.withExecutor(serverId, async (executor) => {
+      const before = await checkComponents(executor, [componentName]);
+      const initial = before[0];
+      if (!initial) throw new Error(`No health check for ${componentName}`);
+      logs.push(initial.message);
+
+      if (initial.healthy) return initial;
+      if (!initial.installed) {
+        throw new Error(`${initial.label} is not installed. Install it before running repair.`);
+      }
+
+      if (componentName === "docker") {
+        await repairDockerDaemon(executor, logs);
+      }
+
+      const after = await checkComponents(executor, [componentName]);
+      const repaired = after[0];
+      if (!repaired) throw new Error(`No health check for ${componentName}`);
+      logs.push(repaired.message);
+      if (!repaired.healthy) {
+        throw new Error(repaired.message || `${repaired.label} is still unhealthy after repair.`);
+      }
+      return repaired;
+    });
+
+    return c.json({ ok: true, component: status, logs });
+  } catch (err) {
+    const message = safeErrorMessage(err);
+    if (
+      message === "No server configured" ||
+      message === "Invalid SSH auth configuration"
+    ) {
+      return c.json({ error: "no_server", message }, 400);
+    }
+    if (isSshAuthError(err)) {
+      return c.json({ error: "auth_failed", message }, 400);
+    }
+    return c.json({ error: "repair_failed", message }, 502);
+  }
+}
+
+async function repairDockerDaemon(
+  executor: CommandExecutor,
+  logs: string[],
+): Promise<void> {
+  const command = [
+    "set -e",
+    "if docker info --format '{{.ServerVersion}}' >/dev/null 2>&1; then echo already-running; exit 0; fi",
+    "if command -v systemctl >/dev/null 2>&1; then",
+    "  systemctl enable docker >/dev/null 2>&1 || true",
+    "  systemctl start docker",
+    "elif command -v service >/dev/null 2>&1; then",
+    "  service docker start",
+    "elif command -v rc-service >/dev/null 2>&1; then",
+    "  rc-update add docker default >/dev/null 2>&1 || true",
+    "  rc-service docker start",
+    "else",
+    "  echo 'No supported service manager found to start Docker' >&2",
+    "  exit 1",
+    "fi",
+    "docker info --format '{{.ServerVersion}}'",
+  ].join("\n");
+
+  logs.push("Attempting to start Docker daemon");
+  const output = await executor.exec(command, { timeout: 60_000 });
+  const trimmed = output.trim();
+  if (trimmed) logs.push(trimmed);
 }
 
 /**
