@@ -28,6 +28,7 @@ import type {
   TCreateServiceBody,
   TUpdateServiceBody,
   TSetServiceEnvVarsBody,
+  TUpgradeServiceImageBody,
 } from "./service.schema";
 
 /** Cap how long a route update AWAITS the (SSH) edge re-register before
@@ -834,6 +835,46 @@ export async function startServiceContainer(
   return provisionServiceContainer(ctx, projectId, serviceId);
 }
 
+export async function upgradeServiceImage(
+  ctx: RequestContext,
+  projectId: string,
+  serviceId: string,
+  data: TUpgradeServiceImageBody,
+) {
+  const image = data.image.trim();
+  if (!image) throw new Error("image-required");
+
+  const { svc } = await assertServiceAccess(ctx, projectId, serviceId);
+  if (svc.build) {
+    throw new Error("Image upgrade is only available for image-only services. Use Redeploy for source-built services.");
+  }
+  if (!svc.image) {
+    throw new Error("Service has no current image configured.");
+  }
+  if (svc.image === image) {
+    return {
+      service: svc,
+      containerId: null,
+      changed: false,
+    };
+  }
+
+  await repos.service.update(serviceId, { image });
+  try {
+    const provisioned = await provisionServiceContainer(ctx, projectId, serviceId);
+    const updated = await repos.service.findById(serviceId);
+    return {
+      service: updated,
+      containerId: provisioned.containerId,
+      ip: provisioned.ip,
+      changed: true,
+    };
+  } catch (err) {
+    await repos.service.update(serviceId, { image: svc.image });
+    throw err;
+  }
+}
+
 export async function stopServiceContainer(
   ctx: RequestContext,
   projectId: string,
@@ -916,4 +957,3 @@ export async function streamServiceRuntimeLogs(
   };
   return { cleanup, serverId };
 }
-

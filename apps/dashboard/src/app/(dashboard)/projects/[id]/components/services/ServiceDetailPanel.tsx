@@ -131,6 +131,7 @@ export function ServiceDetailPanel({
   const [deleting, setDeleting] = useState(false);
   const [deploying, setDeploying] = useState(false);
   const [redeploying, setRedeploying] = useState(false);
+  const [upgradingImage, setUpgradingImage] = useState(false);
   const status = container?.status ?? (service.enabled ? "stopped" : "disabled");
 
   // Backup only applies to compose services (stateful containers) — never
@@ -411,6 +412,29 @@ export function ServiceDetailPanel({
   }, [deploying, container?.containerId, onRefresh, service.name, showToast]);
 
   const handleUpdateService = async (data: Partial<ServiceInput>) => {
+    const nextImage = typeof data.image === "string" ? data.image.trim() : undefined;
+    const currentImage = service.image?.trim() ?? "";
+    const isImageUpgrade =
+      nextImage !== undefined &&
+      nextImage !== currentImage &&
+      !service.build &&
+      Boolean(container?.containerId);
+
+    if (isImageUpgrade) {
+      setUpgradingImage(true);
+      try {
+        const result = await servicesApi.upgradeImage(projectId, service.id, nextImage);
+        if (!result.success) {
+          throw new Error(t.projectDetail.services.detail.toast.imageUpgradeFailed);
+        }
+        await onRefresh();
+        showToast(t.projectDetail.services.detail.toast.imageUpgraded, "success", service.name);
+      } finally {
+        setUpgradingImage(false);
+      }
+      return;
+    }
+
     const result = await servicesApi.update(projectId, service.id, data);
     if (!result.success) {
       throw new Error(t.projectDetail.services.detail.toast.updateFailed);
@@ -733,7 +757,11 @@ export function ServiceDetailPanel({
             </div>
           </div>
 
-          <ServiceSettingsForm service={service} onSubmit={handleUpdateService} />
+          <ServiceSettingsForm
+            service={service}
+            onSubmit={handleUpdateService}
+            savingLabel={upgradingImage ? t.projectDetail.services.detail.upgradingImage : undefined}
+          />
         </div>
       )}
 

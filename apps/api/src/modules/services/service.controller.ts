@@ -19,6 +19,7 @@ import type {
   TCreateServiceBody,
   TUpdateServiceBody,
   TSetServiceEnvVarsBody,
+  TUpgradeServiceImageBody,
 } from "./service.schema";
 
 // ─── List services for a project ─────────────────────────────────────────────
@@ -265,6 +266,20 @@ export async function restartContainer(c: Context) {
     return c.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to restart container";
+    return c.json({ success: false, error: message }, 400);
+  }
+}
+
+export async function upgradeImage(c: Context) {
+  const ctx = getRequestContext(c);
+  const projectId = param(c, "id");
+  const serviceId = param(c, "serviceId");
+  const body = await c.req.json<TUpgradeServiceImageBody>();
+  try {
+    const result = await serviceService.upgradeServiceImage(ctx, projectId, serviceId, body);
+    return c.json({ success: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to upgrade image";
     return c.json({ success: false, error: message }, 400);
   }
 }

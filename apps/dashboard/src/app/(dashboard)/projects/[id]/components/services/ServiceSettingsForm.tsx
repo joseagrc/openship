@@ -23,6 +23,7 @@ import {
 interface ServiceSettingsFormProps {
   service: Service;
   onSubmit: (data: Partial<ServiceInput>) => Promise<void>;
+  savingLabel?: string;
 }
 
 const splitList = (value: string) =>
@@ -33,7 +34,7 @@ const splitList = (value: string) =>
 
 const joinList = (value?: string[] | null) => (value ?? []).join("\n");
 
-export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormProps) {
+export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceSettingsFormProps) {
   const { t } = useI18n();
   const f = t.projectDetail.services.settingsForm;
   const isMonorepo = serviceKind(service) === "monorepo";
@@ -453,7 +454,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {f.saveChanges}
+          {saving ? (savingLabel ?? f.saveChanges) : f.saveChanges}
         </button>
       </div>
     </form>

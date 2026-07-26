@@ -276,6 +276,14 @@ export const servicesApi = {
   restart: (projectId: string | number, serviceId: string) =>
     api.post<{ success: boolean }>(endpoints.services.restart(projectId, serviceId)),
 
+  /** Update an image-only service and recreate its running container. */
+  upgradeImage: (projectId: string | number, serviceId: string, image: string) =>
+    api.post<{ success: boolean; service: Service | null; containerId?: string | null; changed: boolean }>(
+      endpoints.services.upgradeImage(projectId, serviceId),
+      { image },
+      { timeout: 180_000 },
+    ),
+
   /** Accept the pending upstream compose change (apply repo values, clear drift) */
   acceptDrift: (projectId: string | number, serviceId: string) =>
     api.post<{ success: boolean; service: Service }>(

@@ -171,6 +171,14 @@ export const SetServiceEnvVarsBody = Type.Object(
   { additionalProperties: false },
 );
 
+export const UpgradeServiceImageBody = Type.Object(
+  {
+    image: Type.String({ minLength: 1, maxLength: 500 }),
+  },
+  { additionalProperties: false },
+);
+
 export type TCreateServiceBody = Static<typeof CreateServiceBody>;
 export type TUpdateServiceBody = Static<typeof UpdateServiceBody>;
 export type TSetServiceEnvVarsBody = Static<typeof SetServiceEnvVarsBody>;
+export type TUpgradeServiceImageBody = Static<typeof UpgradeServiceImageBody>;
