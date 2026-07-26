@@ -217,6 +217,15 @@ function assertValidStaticRoot(root: string): void {
 
 const execFileAsync = promisify(cpExecFile);
 
+function extractPrimaryProxyTarget(config: string): string | null {
+  const locations = config.matchAll(/location\s+\/\s*\{([\s\S]*?)\n\s*\}/g);
+  for (const location of locations) {
+    const target = location[1]?.match(/proxy_pass\s+([^;]+);/)?.[1]?.trim();
+    if (target && target !== `http://127.0.0.1:${ACME_HTTP01_PORT}`) return target;
+  }
+  return null;
+}
+
 /**
  * Turn certbot's verbose failure output into ONE actionable line.
  *
@@ -727,9 +736,9 @@ ${webhookLocation}${extraLocations}
 
     try {
       const existing = await this._readFile(join(this.sitesDir, `${slug}.conf`));
-      const targetMatch = existing.match(/proxy_pass\s+([^;]+);/);
-      if (targetMatch) {
-        await this.registerRoute({ domain, targetUrl: targetMatch[1], tls: true });
+      const targetUrl = extractPrimaryProxyTarget(existing);
+      if (targetUrl) {
+        await this.registerRoute({ domain, targetUrl, tls: true });
         return true;
       }
 
