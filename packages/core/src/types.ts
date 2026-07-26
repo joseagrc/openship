@@ -122,6 +122,12 @@ export type ComposeHealthcheck = {
 export type ComposeAdvanced = {
   healthcheck?: ComposeHealthcheck;
   /**
+   * Desired stateless replica count. Stored now so compose imports and the UI
+   * can preserve intent; runtimes may warn-and-ignore until they support
+   * balanced multi-container service workloads.
+   */
+  replicas?: number;
+  /**
    * Generated config files bind-mounted (read-only) into this service's
    * container at deploy — seeded from an app template's `files` (e.g. Kong's
    * `kong.yml`, Postgres init `.sql`). Content is resolved at install (generated

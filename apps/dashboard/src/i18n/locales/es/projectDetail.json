@@ -226,6 +226,8 @@
       "command": "Comando",
       "restartPolicy": "Política de reinicio",
       "volumes": "Volúmenes",
+      "replicas": "Réplicas",
+      "replicasHint": "Se guarda para servicios stateless; el balanceo real se habilita en una fase posterior.",
       "healthcheck": "Comprobación de estado",
       "healthcheckHint": "Comando de prueba (formato de shell). Déjalo vacío para usar la comprobación predeterminada de la imagen.",
       "enabled": "Habilitado",
@@ -237,6 +239,9 @@
         "buildContextOrDockerfile": "Añade un contexto de compilación o una ruta de Dockerfile.",
         "rootDirectory": "Añade un directorio raíz (p. ej. apps/web).",
         "buildOrStart": "Añade al menos un comando de compilación o un comando de inicio.",
+        "replicas": "Las réplicas deben ser un número entero entre 1 y 10.",
+        "replicasNeedStateless": "Más de 1 réplica requiere un servicio stateless sin volúmenes.",
+        "replicasNeedUnpublishedPorts": "Más de 1 réplica no puede usar mapeos fijos de puertos del host.",
         "saveFailed": "No se pudo guardar el servicio."
       }
     }

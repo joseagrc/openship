@@ -63,6 +63,7 @@ const HealthcheckSchema = Type.Object(
 const AdvancedSchema = Type.Object(
   {
     healthcheck: Type.Optional(HealthcheckSchema),
+    replicas: Type.Optional(Type.Integer({ minimum: 1, maximum: 10 })),
   },
   { additionalProperties: false },
 );

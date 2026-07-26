@@ -928,6 +928,14 @@ export async function deployComposeServices(
         { serviceName: svc.name },
       );
     }
+    const requestedReplicas = Number((svc.advanced as ComposeAdvanced | null)?.replicas ?? 1);
+    if (requestedReplicas > 1) {
+      logger.log(
+        `Service "${svc.name}": ${requestedReplicas} replicas requested; current runtime deploys one workload until balanced replicas are enabled.\n`,
+        "warn",
+        { serviceName: svc.name },
+      );
+    }
 
     const serviceRuntimeConfig = createServiceRuntimeConfig({
       project,

@@ -233,6 +233,8 @@
       "command": "Command",
       "restartPolicy": "Restart policy",
       "volumes": "Volumes",
+      "replicas": "Replicas",
+      "replicasHint": "Stored for stateless services; balanced runtime scaling is enabled in a later phase.",
       "healthcheck": "Healthcheck",
       "healthcheckHint": "Test command (shell form). Leave empty to use the image's default check.",
       "enabled": "Enabled",
@@ -244,6 +246,9 @@
         "buildContextOrDockerfile": "Add a build context or Dockerfile path.",
         "rootDirectory": "Add a root directory (e.g. apps/web).",
         "buildOrStart": "Add at least a build command or a start command.",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 cannot use fixed host port mappings.",
         "saveFailed": "Failed to save service."
       }
     }

@@ -3,7 +3,7 @@
  */
 
 import { normalizeRoutingFields, repos, composeSpecDiff, type Service, type ServicePublicEndpoint } from "@repo/db";
-import { serviceStatusToContainerState, isValidCustomHostname, ValidationError, type ServiceContainerState } from "@repo/core";
+import { serviceStatusToContainerState, isValidCustomHostname, ValidationError, type ComposeAdvanced, type ServiceContainerState } from "@repo/core";
 import {
   BuildLogger,
   isMultiServiceRuntime,
@@ -59,6 +59,26 @@ const trimOrNull = (value?: string | null) => {
   const trimmed = value?.trim();
   return trimmed || null;
 };
+
+function validateStatelessReplicas(input: {
+  name: string;
+  advanced?: ComposeAdvanced | null;
+  volumes?: string[] | null;
+  ports?: string[] | null;
+}) {
+  const replicas = input.advanced?.replicas ?? 1;
+  if (replicas <= 1) return;
+
+  const volumes = input.volumes ?? [];
+  if (volumes.length > 0) {
+    throw new Error(`Service "${input.name}" uses volumes, so replicas must stay at 1 until stateful scaling is supported.`);
+  }
+
+  const hostPublished = (input.ports ?? []).filter((port) => port.includes(":"));
+  if (hostPublished.length > 0) {
+    throw new Error(`Service "${input.name}" publishes fixed host ports, so replicas must stay at 1.`);
+  }
+}
 
 /**
  * Patch-level wrapper around the canonical `normalizeRoutingFields` from
@@ -226,6 +246,12 @@ export async function createService(
     domainType: data.domainType ?? (monorepoDefaults ? "free" : undefined),
     publicEndpoints: data.publicEndpoints,
   });
+  validateStatelessReplicas({
+    name,
+    advanced: data.advanced,
+    volumes: data.volumes,
+    ports: data.ports,
+  });
 
   const created = await repos.service.create({
     projectId,
@@ -345,6 +371,16 @@ export async function updateService(
     patch.domainType = normalized.domainType;
     patch.publicEndpoints = normalized.publicEndpoints;
   }
+
+  const candidateAdvanced = "advanced" in patch ? patch.advanced : svc.advanced;
+  const candidateVolumes = "volumes" in patch ? patch.volumes : svc.volumes;
+  const candidatePorts = "ports" in patch ? patch.ports : svc.ports;
+  validateStatelessReplicas({
+    name: typeof patch.name === "string" ? patch.name : svc.name,
+    advanced: candidateAdvanced,
+    volumes: candidateVolumes,
+    ports: candidatePorts,
+  });
 
   await repos.service.update(serviceId, patch);
   const updated = await repos.service.findById(serviceId);

@@ -54,6 +54,7 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
   const [hcTimeout, setHcTimeout] = useState("");
   const [hcRetries, setHcRetries] = useState("");
   const [hcStartPeriod, setHcStartPeriod] = useState("");
+  const [replicas, setReplicas] = useState("1");
   const [enabled, setEnabled] = useState(true);
   const [rootDirectory, setRootDirectory] = useState("");
   const [framework, setFramework] = useState("");
@@ -85,6 +86,7 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
     setHcTimeout(hc?.timeout ?? "");
     setHcRetries(hc?.retries != null ? String(hc.retries) : "");
     setHcStartPeriod(hc?.startPeriod ?? "");
+    setReplicas(String(service.advanced?.replicas ?? 1));
     setEnabled(service.enabled ?? true);
     setRootDirectory(service.rootDirectory ?? "");
     setFramework(service.framework ?? "");
@@ -118,6 +120,19 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
         setError(f.errors.buildContextOrDockerfile);
         return;
       }
+      const replicaCount = Number(replicas);
+      if (!Number.isInteger(replicaCount) || replicaCount < 1 || replicaCount > 10) {
+        setError(f.errors.replicas);
+        return;
+      }
+      if (replicaCount > 1 && splitList(volumes).length > 0) {
+        setError(f.errors.replicasNeedStateless);
+        return;
+      }
+      if (replicaCount > 1 && portList.some((port) => port.includes(":"))) {
+        setError(f.errors.replicasNeedUnpublishedPorts);
+        return;
+      }
     } else {
       if (!rootDirectory.trim()) {
         setError(f.errors.rootDirectory);
@@ -133,15 +148,20 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
     setError(null);
 
     const buildAdvanced = (): ComposeAdvanced => {
+      const advanced: ComposeAdvanced = {};
       const test = hcTest.trim();
-      if (!test) return {};
-      const hc: ComposeHealthcheck = { test };
-      if (hcInterval.trim()) hc.interval = hcInterval.trim();
-      if (hcTimeout.trim()) hc.timeout = hcTimeout.trim();
-      if (hcStartPeriod.trim()) hc.startPeriod = hcStartPeriod.trim();
-      const retries = Number(hcRetries);
-      if (hcRetries.trim() && Number.isInteger(retries) && retries >= 0) hc.retries = retries;
-      return { healthcheck: hc };
+      const replicaCount = Number(replicas);
+      if (Number.isInteger(replicaCount) && replicaCount > 1) advanced.replicas = replicaCount;
+      if (test) {
+        const hc: ComposeHealthcheck = { test };
+        if (hcInterval.trim()) hc.interval = hcInterval.trim();
+        if (hcTimeout.trim()) hc.timeout = hcTimeout.trim();
+        if (hcStartPeriod.trim()) hc.startPeriod = hcStartPeriod.trim();
+        const retries = Number(hcRetries);
+        if (hcRetries.trim() && Number.isInteger(retries) && retries >= 0) hc.retries = retries;
+        advanced.healthcheck = hc;
+      }
+      return advanced;
     };
 
     // Environment is intentionally omitted — it's owned by the Env tab, so this
@@ -393,46 +413,62 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
         </Field>
 
         {!isMonorepo && (
-          <Field label={f.healthcheck}>
-            <input
-              value={hcTest}
-              onChange={(event) => setHcTest(event.target.value)}
-              placeholder="curl -f http://localhost:3000/health || exit 1"
-              className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {f.healthcheckHint}
-            </p>
-            {hcTest.trim() && (
-              <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                <input
-                  value={hcInterval}
-                  onChange={(event) => setHcInterval(event.target.value)}
-                  placeholder="interval 30s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcTimeout}
-                  onChange={(event) => setHcTimeout(event.target.value)}
-                  placeholder="timeout 10s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcRetries}
-                  onChange={(event) => setHcRetries(event.target.value)}
-                  placeholder="retries 3"
-                  inputMode="numeric"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcStartPeriod}
-                  onChange={(event) => setHcStartPeriod(event.target.value)}
-                  placeholder="start 40s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-              </div>
-            )}
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+            <Field label={f.replicas}>
+              <input
+                value={replicas}
+                onChange={(event) => setReplicas(event.target.value)}
+                type="number"
+                min={1}
+                max={10}
+                inputMode="numeric"
+                className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {f.replicasHint}
+              </p>
+            </Field>
+            <Field label={f.healthcheck}>
+              <input
+                value={hcTest}
+                onChange={(event) => setHcTest(event.target.value)}
+                placeholder="curl -f http://localhost:3000/health || exit 1"
+                className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {f.healthcheckHint}
+              </p>
+              {hcTest.trim() && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                  <input
+                    value={hcInterval}
+                    onChange={(event) => setHcInterval(event.target.value)}
+                    placeholder="interval 30s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcTimeout}
+                    onChange={(event) => setHcTimeout(event.target.value)}
+                    placeholder="timeout 10s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcRetries}
+                    onChange={(event) => setHcRetries(event.target.value)}
+                    placeholder="retries 3"
+                    inputMode="numeric"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcStartPeriod}
+                    onChange={(event) => setHcStartPeriod(event.target.value)}
+                    placeholder="start 40s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                </div>
+              )}
+            </Field>
+          </div>
         )}
 
         <label
