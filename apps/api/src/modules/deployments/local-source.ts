@@ -31,7 +31,7 @@ async function listLocalTree(dirPath: string): Promise<RepoTreeEntry[]> {
   return tree;
 }
 
-function createLocalReader(dirPath: string): ProjectReader {
+export function createLocalReader(dirPath: string): ProjectReader {
   let treePromise: Promise<RepoTreeEntry[]> | null = null;
 
   const absolutePathFor = (path: string) => path ? join(dirPath, path) : dirPath;

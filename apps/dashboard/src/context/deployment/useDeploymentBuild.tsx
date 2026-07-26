@@ -623,10 +623,9 @@ export function useDeploymentBuild(
         gitOwner: isSourceless ? undefined : config.owner || undefined,
         gitRepo: isSourceless ? undefined : config.repo || undefined,
         gitBranch: isSourceless ? undefined : config.branch || undefined,
+        gitProvider: config.gitProvider || (isUpload ? "upload" : undefined),
+        gitUrl: config.gitUrl || undefined,
         localPath: config.localPath || undefined,
-        // Folder-upload projects: mark the source so it renders correctly and
-        // can later be switched to a GitHub repo (Source tab / linkRepo).
-        gitProvider: isUpload ? "upload" : undefined,
         framework: config.framework,
         packageManager: config.packageManager,
         buildImage: config.buildImage,

@@ -5,11 +5,13 @@
 
 const LOCAL_PREFIX = "local:";
 const UPLOAD_PREFIX = "upload:";
+const GIT_PREFIX = "git:";
 const REPO_V2_PREFIX = "repo:v2:";
 const PROJECT_PREFIX = "project:";
 
 type DecodedSlug =
   | { kind: "repo"; owner: string; repo: string; branch?: string; projectId?: string }
+  | { kind: "git"; url: string; branch?: string }
   | { kind: "local"; path: string }
   | { kind: "upload"; sessionId: string }
   | { kind: "project"; projectId: string };
@@ -45,6 +47,10 @@ export function encodeUploadSlug(sessionId: string): string {
   return encodeBase64Url(UPLOAD_PREFIX + sessionId);
 }
 
+export function encodeGitSlug(url: string, branch?: string): string {
+  return encodeBase64Url(GIT_PREFIX + JSON.stringify({ url, ...(branch ? { branch } : {}) }));
+}
+
 /**
  * Encodes an existing project id into a URL-safe slug (prefixed "project:").
  * The deploy wizard decodes it and hydrates from the project's DB rows — used
@@ -77,6 +83,18 @@ export function decodeSlug(slug: string): DecodedSlug | null {
     if (decoded.startsWith(UPLOAD_PREFIX)) {
       const sessionId = decoded.slice(UPLOAD_PREFIX.length);
       return sessionId ? { kind: "upload", sessionId } : null;
+    }
+
+    if (decoded.startsWith(GIT_PREFIX)) {
+      const raw = decoded.slice(GIT_PREFIX.length);
+      const payload = raw.startsWith("{") ? JSON.parse(raw) : { url: raw };
+      const { url, branch } = payload as Record<string, unknown>;
+      if (typeof url !== "string" || !url) return null;
+      return {
+        kind: "git",
+        url,
+        ...(typeof branch === "string" && branch ? { branch } : {}),
+      };
     }
 
     if (decoded.startsWith(PROJECT_PREFIX)) {

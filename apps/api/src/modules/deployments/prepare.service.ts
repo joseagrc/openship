@@ -1,5 +1,6 @@
 /**
- * Prepare service - resolves project info from a source (GitHub or local path).
+ * Prepare service - resolves project info from a source (GitHub, generic Git,
+ * or local path).
  *
  * Pure introspection: reads files, detects stack, returns a unified shape.
  * No database writes, no deployment logic.
@@ -62,6 +63,7 @@ export type Source =
        *  github resolver throws when it's missing. */
       ctx?: RequestContext;
     }
+  | { source: "git"; url: string; branch?: string }
   | { source: "local"; path: string };
 
 export interface ProjectInfo {
@@ -454,6 +456,14 @@ export async function resolveProjectInfo(input: Source): Promise<ProjectInfo> {
       throw new Error("resolveProjectInfo(github): ctx is required");
     }
     return resolveFromGitHub(input.ctx, input.owner, input.repo, input.branch);
+  }
+
+  if (input.source === "git") {
+    if (env.CLOUD_MODE) {
+      throw new Error("Generic Git URL resolution is not available in cloud mode");
+    }
+    const { resolveFromGitUrl } = await import("./git-source");
+    return resolveFromGitUrl(input.url, input.branch);
   }
 
   if (env.CLOUD_MODE) {

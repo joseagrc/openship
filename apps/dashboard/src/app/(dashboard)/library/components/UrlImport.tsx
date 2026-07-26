@@ -3,8 +3,17 @@
 import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Link2, ArrowRight } from "lucide-react";
-import { encodeRepoSlug } from "@/utils/repoSlug";
+import { encodeGitSlug, encodeRepoSlug } from "@/utils/repoSlug";
 import { useI18n } from "@/components/i18n-provider";
+
+function parseGithubUrl(url: string): { owner: string; repo: string } | null {
+  const match = url.match(/(?:https?:\/\/)?(?:www\.)?github\.com\/([^/]+)\/([^/.]+)(?:\.git)?/);
+  return match ? { owner: match[1]!, repo: match[2]! } : null;
+}
+
+function isGitUrl(url: string): boolean {
+  return /^https?:\/\/.+/i.test(url) || /^ssh:\/\/.+/i.test(url) || /^git@[^:]+:.+$/i.test(url);
+}
 
 export function UrlImport() {
   const { t } = useI18n();
@@ -16,16 +25,14 @@ export function UrlImport() {
     e.preventDefault();
     setError("");
 
-    const match = url.match(
-      /(?:https?:\/\/)?(?:www\.)?github\.com\/([^/]+)\/([^/.]+)/
-    );
-    if (!match) {
+    const trimmed = url.trim();
+    if (!isGitUrl(trimmed)) {
       setError(t.library.urlImport.invalidUrl);
       return;
     }
 
-    const [, owner, repo] = match;
-    const slug = encodeRepoSlug(owner!, repo!);
+    const github = parseGithubUrl(trimmed);
+    const slug = github ? encodeRepoSlug(github.owner, github.repo) : encodeGitSlug(trimmed);
     router.push(`/deploy/${slug}`);
   };
 
@@ -49,7 +56,7 @@ export function UrlImport() {
                 type="url"
                 value={url}
                 onChange={(e) => { setUrl(e.target.value); setError(""); }}
-                placeholder="https://github.com/username/repository"
+                placeholder="https://git.example.com/group/repository.git"
                 className={`w-full px-4 py-3 bg-background border rounded-xl text-sm text-foreground placeholder:text-muted-foreground/50 focus:outline-none focus:ring-2 transition-all ${
                   error
                     ? "border-danger-border focus:ring-danger-border"

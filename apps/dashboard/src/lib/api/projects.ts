@@ -79,6 +79,7 @@ export const projectsApi = {
     /** Source discriminator; "upload" for browser folder-upload projects. */
     gitProvider?: string;
     gitRepo?: string;
+    gitUrl?: string;
     gitBranch?: string;
     framework?: string;
     localPath?: string;

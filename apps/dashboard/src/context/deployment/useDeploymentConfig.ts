@@ -34,6 +34,8 @@ interface PreparedConfigArgs {
   branch: string;
   branches: string[];
   projectId?: string;
+  gitProvider?: string;
+  gitUrl?: string;
   localPath?: string;
   uploadSessionId?: string;
 }
@@ -612,6 +614,8 @@ export function useDeploymentConfig() {
         projectId,
         repo: repoName,
         owner,
+        gitProvider: args.gitProvider,
+        gitUrl: args.gitUrl,
         localPath,
         uploadSessionId,
         projectName: project?.name || repoName,
@@ -794,6 +798,65 @@ export function useDeploymentConfig() {
         return {
           success: false,
           error: errorMessage,
+          errorType: err instanceof ApiError ? "api_error" : "network_error",
+        };
+      }
+    },
+    [buildPreparedConfig],
+  );
+
+  const initializeFromGitUrl = useCallback(
+    async (
+      url: string,
+      context?: { branch?: string; projectId?: string },
+    ): Promise<{ success: boolean; error?: string; errorType?: string }> => {
+      try {
+        let project: PersistedProject = null;
+        if (context?.projectId) {
+          const projectResponse = await projectsApi.getInfo(context.projectId);
+          project = projectResponse?.data?.project ?? projectResponse?.project ?? null;
+        }
+
+        const requestedBranch = (project?.gitBranch || context?.branch || "").trim() || undefined;
+        const response = await deployApi.prepare({
+          source: "git",
+          url: project?.gitUrl || url,
+          branch: requestedBranch,
+        });
+
+        if (response?.error) {
+          return { success: false, error: response.error, errorType: "api_error" };
+        }
+
+        const repoName = response.repository.name || "repository";
+        const selectedBranch =
+          requestedBranch ||
+          response.repository.selected_branch ||
+          response.repository.default_branch ||
+          "";
+        const branches = response.repository.branches?.map((b: any) => b.name) || [];
+        const branchOptions =
+          selectedBranch && !branches.includes(selectedBranch)
+            ? [selectedBranch, ...branches]
+            : branches;
+
+        setConfig((prev) => buildPreparedConfig(prev, {
+          response,
+          project,
+          repoName,
+          owner: response.repository.owner?.login || "git",
+          branch: selectedBranch,
+          branches: branchOptions,
+          projectId: context?.projectId,
+          gitProvider: "git",
+          gitUrl: response.repository.clone_url || url,
+        }));
+
+        return { success: true };
+      } catch (err) {
+        return {
+          success: false,
+          error: getApiErrorMessage(err, "Failed to fetch Git repository data"),
           errorType: err instanceof ApiError ? "api_error" : "network_error",
         };
       }
@@ -1005,6 +1068,7 @@ export function useDeploymentConfig() {
     updateOptions,
     initializeFromRepo,
     initializeFromLocal,
+    initializeFromGitUrl,
     initializeFromUpload,
     initializeFromProject,
   };

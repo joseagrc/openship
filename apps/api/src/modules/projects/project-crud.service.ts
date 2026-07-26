@@ -216,6 +216,19 @@ function projectGitUrl(owner?: string | null, repo?: string | null) {
   return owner && repo ? `https://github.com/${owner}/${repo}.git` : undefined;
 }
 
+function sanitizeGitCloneUrl(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed) || /^ssh:\/\//i.test(trimmed) || /^git@[^:]+:.+$/i.test(trimmed)) {
+    return trimmed;
+  }
+  throw new ValidationError("gitUrl must be an HTTPS or SSH Git URL");
+}
+
+function isGithubProvider(provider?: string | null) {
+  return !provider || provider === "github";
+}
+
 function resolveProjectSource(data: TCreateProjectBody) {
   // Release/dist source: a prebuilt dist, no git repo and no stored localPath
   // (its dir is resolved per-deploy). The source repo, if any, lives in
@@ -230,15 +243,20 @@ function resolveProjectSource(data: TCreateProjectBody) {
     throw new ForbiddenError("Release/dist source projects are not available in cloud mode");
   }
   const safeLocalPath = !isRelease && data.localPath && !env.CLOUD_MODE ? data.localPath : undefined;
-  const gitOwner = isRelease || safeLocalPath ? undefined : data.gitOwner;
-  const gitRepo = isRelease || safeLocalPath ? undefined : data.gitRepo;
+  const requestedProvider = data.gitProvider ?? "github";
+  const genericGitUrl =
+    !isRelease && !safeLocalPath && !isGithubProvider(requestedProvider)
+      ? sanitizeGitCloneUrl(data.gitUrl)
+      : undefined;
+  const gitOwner = isRelease || safeLocalPath || genericGitUrl ? undefined : data.gitOwner;
+  const gitRepo = isRelease || safeLocalPath || genericGitUrl ? undefined : data.gitRepo;
 
   return {
     safeLocalPath,
     gitOwner,
     gitRepo,
-    gitProvider: isRelease ? "release" : safeLocalPath ? "local" : (data.gitProvider ?? "github"),
-    gitUrl: projectGitUrl(gitOwner, gitRepo),
+    gitProvider: isRelease ? "release" : safeLocalPath ? "local" : requestedProvider,
+    gitUrl: genericGitUrl ?? projectGitUrl(gitOwner, gitRepo),
     releaseSource: isRelease ? ((data.releaseSource as ReleaseSource | undefined) ?? null) : null,
   };
 }
@@ -1518,4 +1536,3 @@ export async function getLatestDeploymentSession(
       : null,
   };
 }
-

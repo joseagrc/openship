@@ -25,6 +25,7 @@ export const DeploymentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     updateOptions,
     initializeFromRepo,
     initializeFromLocal,
+    initializeFromGitUrl,
     initializeFromUpload,
     initializeFromProject,
   } = useDeploymentConfig();
@@ -55,6 +56,7 @@ export const DeploymentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     updateOptions,
     initializeFromRepo,
     initializeFromLocal,
+    initializeFromGitUrl,
     initializeFromUpload,
     initializeFromProject,
     startDeployment,
@@ -76,4 +78,3 @@ export const DeploymentProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     </DeploymentContext.Provider>
   );
 };
-

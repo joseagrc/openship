@@ -58,7 +58,7 @@ const ProjectName: React.FC = () => {
 const DeployRepository: React.FC = () => {
     const params = useParams();
     const slug = params.slug as string;
-    const { config, initializeFromRepo, initializeFromLocal, initializeFromUpload, initializeFromProject, updateConfig } = useDeployment();
+    const { config, initializeFromRepo, initializeFromLocal, initializeFromGitUrl, initializeFromUpload, initializeFromProject, updateConfig } = useDeployment();
     const { deployMode } = usePlatform();
     const { t } = useI18n();
     const searchParams = useSearchParams();
@@ -84,12 +84,14 @@ const DeployRepository: React.FC = () => {
             const label =
                 d.kind === "local" ? d.path
                     : d.kind === "upload" ? t.deploy.page.uploadedFolder
+                    : d.kind === "git" ? d.url
                     : d.kind === "project" ? ""
                     : `${d.owner}/${d.repo}`;
             return { kind: "settings" as const, label };
         }
         if (d.kind === "local") return { kind: "local" as const, path: d.path };
         if (d.kind === "upload") return { kind: "local" as const, path: t.deploy.page.uploadedFolder };
+        if (d.kind === "git") return { kind: "repo" as const, owner: "git", repo: d.url, branch: branch ?? d.branch };
         // Repo-less app: hydrated from saved rows, no git fetch — neutral summary.
         if (d.kind === "project") return { kind: "settings" as const, label: "" };
         return {
@@ -210,6 +212,11 @@ const DeployRepository: React.FC = () => {
                     projectId,
                     stack: uploadStack,
                     name: uploadName,
+                });
+            } else if (decoded.kind === "git") {
+                result = await initializeFromGitUrl(decoded.url, {
+                    branch: branch ?? decoded.branch,
+                    projectId,
                 });
             } else {
                 result = await initializeFromRepo(decoded.owner, decoded.repo, force, {

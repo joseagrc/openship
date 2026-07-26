@@ -189,6 +189,7 @@ export const CreateProjectBody = Type.Object({
   gitProvider: Type.Optional(Type.String({ default: "github" })),
   gitOwner: Type.Optional(Type.String({ maxLength: 100 })),
   gitRepo: Type.Optional(Type.String({ maxLength: 100 })),
+  gitUrl: Type.Optional(Type.String({ maxLength: 1000 })),
   gitBranch: Type.Optional(Type.String({ default: "main" })),
   installationId: Type.Optional(Type.Number()),
   // Release/dist source (gitProvider === "release")
