@@ -18,7 +18,7 @@ on:
     branches:
       - main
     tags:
-      - 'v*.*.*'
+      - "v*.*.*"
   workflow_dispatch:
     inputs:
       tag:
@@ -33,6 +33,14 @@ concurrency:
 permissions:
   contents: read
   packages: write
+
+env:
+  # Optional repo/org secrets:
+  #   GHCR_USERNAME=joseagrc
+  #   GHCR_TOKEN=<PAT with write:packages>
+  # If they are not set, the workflow falls back to GitHub's per-run token.
+  GHCR_USERNAME: ${{ secrets.GHCR_USERNAME || github.repository_owner }}
+  GHCR_TOKEN: ${{ secrets.GHCR_TOKEN || github.token }}
 
 jobs:
   # Native per-arch builds (no QEMU — reuses the ubuntu-24.04-arm runner). Each
@@ -59,18 +67,21 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Normalize image namespace
+        run: echo "IMAGE_NAMESPACE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.GHCR_USERNAME }}
+          password: ${{ env.GHCR_TOKEN }}
 
       - name: Image labels
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/openship-${{ matrix.image }}
+          images: ${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}
 
       - name: Build and push by digest
         id: build
@@ -80,7 +91,7 @@ jobs:
           file: apps/${{ matrix.image }}/Dockerfile
           platforms: linux/${{ matrix.platform }}
           labels: ${{ steps.meta.outputs.labels }}
-          outputs: type=image,name=ghcr.io/${{ github.repository_owner }}/openship-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
+          outputs: type=image,name=${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }},push-by-digest=true,name-canonical=true,push=true
           cache-from: type=gha,scope=${{ matrix.image }}-${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.image }}-${{ matrix.platform }}
 
@@ -118,12 +129,15 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
+      - name: Normalize image namespace
+        run: echo "IMAGE_NAMESPACE=ghcr.io/${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_ENV"
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: ${{ env.GHCR_USERNAME }}
+          password: ${{ env.GHCR_TOKEN }}
 
       # Tag push → semver + :latest (auto: RCs like v1.2.3-rc.1 skip :latest).
       # main push → :main + :main-<sha>, never :latest.
@@ -132,7 +146,7 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository_owner }}/openship-${{ matrix.image }}
+          images: ${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}
           tags: |
             type=semver,pattern={{version}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
             type=semver,pattern={{major}}.{{minor}},enable=${{ github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') }}
@@ -148,7 +162,7 @@ jobs:
         working-directory: /tmp/digests
         env:
           METADATA_JSON: ${{ steps.meta.outputs.json }}
-          SRC: ghcr.io/${{ github.repository_owner }}/openship-${{ matrix.image }}
+          SRC: ${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}
         run: |
           set -euo pipefail
           docker buildx imagetools create \
@@ -158,4 +172,4 @@ jobs:
       - name: Inspect
         run: |
           docker buildx imagetools inspect \
-            "ghcr.io/${{ github.repository_owner }}/openship-${{ matrix.image }}:${{ steps.meta.outputs.version }}" || true
+            "${{ env.IMAGE_NAMESPACE }}/openship-${{ matrix.image }}:${{ steps.meta.outputs.version }}" || true
