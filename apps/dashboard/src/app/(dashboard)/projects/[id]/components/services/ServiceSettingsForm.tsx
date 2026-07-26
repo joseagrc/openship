@@ -34,6 +34,16 @@ const splitList = (value: string) =>
 
 const joinList = (value?: string[] | null) => (value ?? []).join("\n");
 
+const hasPublishedHostPort = (port: string) => port.includes(":");
+
+const toContainerPort = (port: string) => {
+  if (!hasPublishedHostPort(port)) return port;
+  return port.split(":").at(-1)?.trim() || port;
+};
+
+const portsForReplicas = (ports: string[], replicas: number) =>
+  replicas > 1 ? ports.map(toContainerPort) : ports;
+
 export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceSettingsFormProps) {
   const { t } = useI18n();
   const f = t.projectDetail.services.settingsForm;
@@ -129,10 +139,6 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
         setError(f.errors.replicasNeedStateless);
         return;
       }
-      if (replicaCount > 1 && portList.some((port) => port.includes(":"))) {
-        setError(f.errors.replicasNeedUnpublishedPorts);
-        return;
-      }
     } else {
       if (!rootDirectory.trim()) {
         setError(f.errors.rootDirectory);
@@ -164,6 +170,11 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
       return advanced;
     };
 
+    const normalizedPorts = portsForReplicas(portList, Number(replicas));
+    if (normalizedPorts.join("\n") !== portList.join("\n")) {
+      setPorts(joinList(normalizedPorts));
+    }
+
     // Environment is intentionally omitted — it's owned by the Env tab, so this
     // PATCH must not clobber it.
     const payload: Partial<ServiceInput> = isMonorepo
@@ -172,7 +183,7 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
           image: "",
           build: "",
           dockerfile: "",
-          ports: portList,
+          ports: normalizedPorts,
           dependsOn: splitList(dependsOn),
           volumes: splitList(volumes),
           command: "",
@@ -192,7 +203,7 @@ export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceS
           image: sourceType === "image" ? image.trim() : "",
           build: sourceType === "build" ? build.trim() || "." : "",
           dockerfile: sourceType === "build" ? dockerfile.trim() : "",
-          ports: portList,
+          ports: normalizedPorts,
           dependsOn: splitList(dependsOn),
           volumes: splitList(volumes),
           command: command.trim(),

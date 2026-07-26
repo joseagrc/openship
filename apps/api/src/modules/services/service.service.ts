@@ -60,6 +60,21 @@ const trimOrNull = (value?: string | null) => {
   return trimmed || null;
 };
 
+const hasPublishedHostPort = (port: string) => port.includes(":");
+
+function normalizePortsForReplicas(
+  ports: string[] | null | undefined,
+  advanced: ComposeAdvanced | null | undefined,
+) {
+  const list = ports ?? [];
+  const replicas = advanced?.replicas ?? 1;
+  if (replicas <= 1) return list;
+  return list.map((port) => {
+    if (!hasPublishedHostPort(port)) return port;
+    return port.split(":").at(-1)?.trim() || port;
+  });
+}
+
 function validateStatelessReplicas(input: {
   name: string;
   advanced?: ComposeAdvanced | null;
@@ -74,7 +89,7 @@ function validateStatelessReplicas(input: {
     throw new Error(`Service "${input.name}" uses volumes, so replicas must stay at 1 until stateful scaling is supported.`);
   }
 
-  const hostPublished = (input.ports ?? []).filter((port) => port.includes(":"));
+  const hostPublished = (input.ports ?? []).filter(hasPublishedHostPort);
   if (hostPublished.length > 0) {
     throw new Error(`Service "${input.name}" publishes fixed host ports, so replicas must stay at 1.`);
   }
@@ -246,11 +261,12 @@ export async function createService(
     domainType: data.domainType ?? (monorepoDefaults ? "free" : undefined),
     publicEndpoints: data.publicEndpoints,
   });
+  const ports = normalizePortsForReplicas(data.ports, data.advanced);
   validateStatelessReplicas({
     name,
     advanced: data.advanced,
     volumes: data.volumes,
-    ports: data.ports,
+    ports,
   });
 
   const created = await repos.service.create({
@@ -260,7 +276,7 @@ export async function createService(
     image: trimOrNull(data.image),
     build: trimOrNull(data.build),
     dockerfile: trimOrNull(data.dockerfile),
-    ports: data.ports ?? [],
+    ports,
     dependsOn: data.dependsOn ?? [],
     environment: data.environment ?? {},
     volumes: data.volumes ?? [],
@@ -374,7 +390,14 @@ export async function updateService(
 
   const candidateAdvanced = "advanced" in patch ? patch.advanced : svc.advanced;
   const candidateVolumes = "volumes" in patch ? patch.volumes : svc.volumes;
-  const candidatePorts = "ports" in patch ? patch.ports : svc.ports;
+  const candidatePorts = normalizePortsForReplicas(
+    "ports" in patch ? patch.ports : svc.ports,
+    candidateAdvanced,
+  );
+  const candidateReplicas = (candidateAdvanced as ComposeAdvanced | null | undefined)?.replicas ?? 1;
+  if (candidateReplicas > 1) {
+    patch.ports = candidatePorts;
+  }
   validateStatelessReplicas({
     name: typeof patch.name === "string" ? patch.name : svc.name,
     advanced: candidateAdvanced,
