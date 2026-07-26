@@ -17,6 +17,8 @@ export const endpoints = {
     import: "projects/import",
     info: (id: string | number) => `projects/${id}/info`,
     environments: (id: string | number) => `projects/${id}/environments`,
+    environment: (id: string | number, environmentId: string | number) =>
+      `projects/${id}/environments/${environmentId}`,
     options: (id: string | number) => `projects/${id}/options`,
     portCheck: (id: string | number) => `projects/${id}/port-check`,
     outputCheck: (id: string | number) => `projects/${id}/output-check`,
@@ -96,6 +98,8 @@ export const endpoints = {
       `projects/${projectId}/services/${serviceId}/stop`,
     restart: (projectId: string | number, serviceId: string) =>
       `projects/${projectId}/services/${serviceId}/restart`,
+    upgradeImage: (projectId: string | number, serviceId: string) =>
+      `projects/${projectId}/services/${serviceId}/image/upgrade`,
     driftAccept: (projectId: string | number, serviceId: string) =>
       `projects/${projectId}/services/${serviceId}/drift/accept`,
     driftKeep: (projectId: string | number, serviceId: string) =>
@@ -259,6 +263,7 @@ export const endpoints = {
     serverReachability: (id: string) => `system/servers/${id}/reachability`,
     serverRateLimit: (id: string) => `system/servers/${id}/rate-limit`,
     serverPortsScan: (id: string) => `system/servers/${id}/ports/scan`,
+    serverRepair: (id: string) => `system/servers/${id}/repair`,
     // Native-module versioning + migration (OpenResty, …)
     serverModules: (id: string) => `system/servers/${id}/modules`,
     serverModulesScan: (id: string) => `system/servers/${id}/modules/scan`,

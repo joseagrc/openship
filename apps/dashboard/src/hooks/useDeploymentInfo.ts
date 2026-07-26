@@ -19,6 +19,10 @@ export type ClientDeploymentInfo = {
   selfHosted: boolean;
   deployMode: string;
   authMode: "cloud" | "local" | "none";
+  oauthProviders?: {
+    github?: boolean;
+    google?: boolean;
+  };
   /** Running server release (self-hosted). Absent on older servers. */
   version?: string;
 };

@@ -1,4 +1,5 @@
 import { repos, type Project } from "@repo/db";
+import { isGitHubProvider } from "@repo/core";
 import { type RequestContext } from "../../lib/request-context";
 import { compareCommits } from "../github/github.service";
 import { classifyChangedFiles, routeServicesByChanges } from "../github/webhook-changed-files";
@@ -52,6 +53,7 @@ export async function resolveSmartRoute(
       !opts.commitSha ||
       !opts.commitShaBefore ||
       opts.commitSha === opts.commitShaBefore ||
+      !isGitHubProvider(project.gitProvider) ||
       !project.gitOwner ||
       !project.gitRepo
     ) {

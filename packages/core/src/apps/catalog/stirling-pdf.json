@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "stirling-pdf",
   "name": "Stirling PDF",
   "description": "Split, merge, convert, OCR and edit PDFs locally. Default login is admin / stirling — change it.",

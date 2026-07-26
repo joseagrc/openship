@@ -7,12 +7,17 @@ interface AuthContextValue {
   authMode: "cloud" | "local" | "none";
   cloudAuthUrl: string;
   selfHosted: boolean;
+  oauthProviders: {
+    github: boolean;
+    google: boolean;
+  };
 }
 
 const AuthContext = createContext<AuthContextValue>({
   authMode: "local",
   cloudAuthUrl: CLOUD_DASHBOARD_URL,
   selfHosted: true,
+  oauthProviders: { github: false, google: false },
 });
 
 export function useAuthContext() {
@@ -24,11 +29,25 @@ interface AuthProvidersProps {
   authMode: "cloud" | "local" | "none";
   cloudAuthUrl: string;
   selfHosted: boolean;
+  oauthProviders?: {
+    github?: boolean;
+    google?: boolean;
+  };
 }
 
-export function AuthProviders({ children, authMode, cloudAuthUrl, selfHosted }: AuthProvidersProps) {
+export function AuthProviders({ children, authMode, cloudAuthUrl, selfHosted, oauthProviders }: AuthProvidersProps) {
   return (
-    <AuthContext.Provider value={{ authMode, cloudAuthUrl, selfHosted }}>
+    <AuthContext.Provider
+      value={{
+        authMode,
+        cloudAuthUrl,
+        selfHosted,
+        oauthProviders: {
+          github: oauthProviders?.github === true,
+          google: oauthProviders?.google === true,
+        },
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

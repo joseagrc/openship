@@ -112,6 +112,10 @@ healthRoutes.get("/env", rateLimiterFor("default-anon"), async (c) => {
     isServerHost: !env.CLOUD_MODE && env.DEPLOY_MODE !== "desktop",
     version: APP_VERSION,
     authMode,
+    oauthProviders: {
+      github: !!(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET),
+      google: !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET),
+    },
     teamMode,
     migrationTargetUrl,
     migrationInProgress,

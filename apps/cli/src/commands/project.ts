@@ -13,6 +13,7 @@ import { apiRequest, paginate, ApiError } from "../lib/api-client";
 import { sseRequest } from "../lib/sse";
 import { fetchCaps, requireSelfHost } from "../lib/caps";
 import { isJsonMode, printJson, printTable, ok, err, info } from "../lib/output";
+import { ENVIRONMENTS, normalizeEnvironment } from "@repo/core";
 
 // ─── Shared helpers ──────────────────────────────────────────────────────────
 
@@ -50,8 +51,6 @@ function printProject(project: Record<string, unknown>): void {
     process.stdout.write(`  ${chalk.dim(k.padEnd(12))} ${String(v)}\n`);
   }
 }
-
-const ENVIRONMENTS = ["production", "preview", "development"];
 
 // ─── list ────────────────────────────────────────────────────────────────────
 // GET /api/projects → { data, total, page, perPage } (project.routes.ts:46)
@@ -173,10 +172,12 @@ envCmd
   .command("get")
   .description("List env vars (secret values are masked by the API)")
   .argument("<id>", "Project ID")
-  .option("--environment <env>", "Filter by environment (production|preview|development)")
+  .option("--environment <env>", "Filter by environment (production|staging|development)")
   .action(
     action(async (id: string, opts) => {
-      const qs = opts.environment ? `?environment=${encodeURIComponent(opts.environment)}` : "";
+      const qs = opts.environment
+        ? `?environment=${encodeURIComponent(normalizeEnvironment(opts.environment))}`
+        : "";
       const { data } = await apiRequest<{ data: Record<string, unknown>[] }>(
         `/projects/${encodeURIComponent(id)}/env${qs}`,
       );
@@ -219,7 +220,10 @@ envCmd
   .option("--secret", "Mark every --set value as a secret")
   .action(
     action(async (id: string, opts) => {
-      if (!ENVIRONMENTS.includes(opts.environment)) {
+      let environment: string;
+      try {
+        environment = normalizeEnvironment(opts.environment);
+      } catch {
         err(`  environment must be one of: ${ENVIRONMENTS.join(", ")}`);
         process.exitCode = 1;
         return;
@@ -243,7 +247,7 @@ envCmd
         `/projects/${encodeURIComponent(id)}/env`,
         {
           method: "PATCH",
-          body: JSON.stringify({ environment: opts.environment, upserts, deletes }),
+          body: JSON.stringify({ environment, upserts, deletes }),
         },
       );
       if (isJsonMode()) {
@@ -251,7 +255,7 @@ envCmd
         return;
       }
       ok(
-        `\n  Updated env (${opts.environment}): ${upserts.length} upserted, ${deletes.length} deleted\n`,
+        `\n  Updated env (${environment}): ${upserts.length} upserted, ${deletes.length} deleted\n`,
       );
     }),
   );

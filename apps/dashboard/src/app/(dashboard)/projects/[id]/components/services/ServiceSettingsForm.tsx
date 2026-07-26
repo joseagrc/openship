@@ -23,6 +23,7 @@ import {
 interface ServiceSettingsFormProps {
   service: Service;
   onSubmit: (data: Partial<ServiceInput>) => Promise<void>;
+  savingLabel?: string;
 }
 
 const splitList = (value: string) =>
@@ -33,7 +34,17 @@ const splitList = (value: string) =>
 
 const joinList = (value?: string[] | null) => (value ?? []).join("\n");
 
-export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormProps) {
+const hasPublishedHostPort = (port: string) => port.includes(":");
+
+const toContainerPort = (port: string) => {
+  if (!hasPublishedHostPort(port)) return port;
+  return port.split(":").at(-1)?.trim() || port;
+};
+
+const portsForReplicas = (ports: string[], replicas: number) =>
+  replicas > 1 ? ports.map(toContainerPort) : ports;
+
+export function ServiceSettingsForm({ service, onSubmit, savingLabel }: ServiceSettingsFormProps) {
   const { t } = useI18n();
   const f = t.projectDetail.services.settingsForm;
   const isMonorepo = serviceKind(service) === "monorepo";
@@ -53,6 +64,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
   const [hcTimeout, setHcTimeout] = useState("");
   const [hcRetries, setHcRetries] = useState("");
   const [hcStartPeriod, setHcStartPeriod] = useState("");
+  const [replicas, setReplicas] = useState("1");
   const [enabled, setEnabled] = useState(true);
   const [rootDirectory, setRootDirectory] = useState("");
   const [framework, setFramework] = useState("");
@@ -84,6 +96,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
     setHcTimeout(hc?.timeout ?? "");
     setHcRetries(hc?.retries != null ? String(hc.retries) : "");
     setHcStartPeriod(hc?.startPeriod ?? "");
+    setReplicas(String(service.advanced?.replicas ?? 1));
     setEnabled(service.enabled ?? true);
     setRootDirectory(service.rootDirectory ?? "");
     setFramework(service.framework ?? "");
@@ -117,6 +130,15 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
         setError(f.errors.buildContextOrDockerfile);
         return;
       }
+      const replicaCount = Number(replicas);
+      if (!Number.isInteger(replicaCount) || replicaCount < 1 || replicaCount > 10) {
+        setError(f.errors.replicas);
+        return;
+      }
+      if (replicaCount > 1 && splitList(volumes).length > 0) {
+        setError(f.errors.replicasNeedStateless);
+        return;
+      }
     } else {
       if (!rootDirectory.trim()) {
         setError(f.errors.rootDirectory);
@@ -132,16 +154,26 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
     setError(null);
 
     const buildAdvanced = (): ComposeAdvanced => {
+      const advanced: ComposeAdvanced = {};
       const test = hcTest.trim();
-      if (!test) return {};
-      const hc: ComposeHealthcheck = { test };
-      if (hcInterval.trim()) hc.interval = hcInterval.trim();
-      if (hcTimeout.trim()) hc.timeout = hcTimeout.trim();
-      if (hcStartPeriod.trim()) hc.startPeriod = hcStartPeriod.trim();
-      const retries = Number(hcRetries);
-      if (hcRetries.trim() && Number.isInteger(retries) && retries >= 0) hc.retries = retries;
-      return { healthcheck: hc };
+      const replicaCount = Number(replicas);
+      if (Number.isInteger(replicaCount) && replicaCount > 1) advanced.replicas = replicaCount;
+      if (test) {
+        const hc: ComposeHealthcheck = { test };
+        if (hcInterval.trim()) hc.interval = hcInterval.trim();
+        if (hcTimeout.trim()) hc.timeout = hcTimeout.trim();
+        if (hcStartPeriod.trim()) hc.startPeriod = hcStartPeriod.trim();
+        const retries = Number(hcRetries);
+        if (hcRetries.trim() && Number.isInteger(retries) && retries >= 0) hc.retries = retries;
+        advanced.healthcheck = hc;
+      }
+      return advanced;
     };
+
+    const normalizedPorts = portsForReplicas(portList, Number(replicas));
+    if (normalizedPorts.join("\n") !== portList.join("\n")) {
+      setPorts(joinList(normalizedPorts));
+    }
 
     // Environment is intentionally omitted — it's owned by the Env tab, so this
     // PATCH must not clobber it.
@@ -151,7 +183,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
           image: "",
           build: "",
           dockerfile: "",
-          ports: portList,
+          ports: normalizedPorts,
           dependsOn: splitList(dependsOn),
           volumes: splitList(volumes),
           command: "",
@@ -171,7 +203,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
           image: sourceType === "image" ? image.trim() : "",
           build: sourceType === "build" ? build.trim() || "." : "",
           dockerfile: sourceType === "build" ? dockerfile.trim() : "",
-          ports: portList,
+          ports: normalizedPorts,
           dependsOn: splitList(dependsOn),
           volumes: splitList(volumes),
           command: command.trim(),
@@ -392,46 +424,62 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
         </Field>
 
         {!isMonorepo && (
-          <Field label={f.healthcheck}>
-            <input
-              value={hcTest}
-              onChange={(event) => setHcTest(event.target.value)}
-              placeholder="curl -f http://localhost:3000/health || exit 1"
-              className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
-            />
-            <p className="mt-1 text-xs text-muted-foreground">
-              {f.healthcheckHint}
-            </p>
-            {hcTest.trim() && (
-              <div className="mt-2 grid gap-2 sm:grid-cols-4">
-                <input
-                  value={hcInterval}
-                  onChange={(event) => setHcInterval(event.target.value)}
-                  placeholder="interval 30s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcTimeout}
-                  onChange={(event) => setHcTimeout(event.target.value)}
-                  placeholder="timeout 10s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcRetries}
-                  onChange={(event) => setHcRetries(event.target.value)}
-                  placeholder="retries 3"
-                  inputMode="numeric"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-                <input
-                  value={hcStartPeriod}
-                  onChange={(event) => setHcStartPeriod(event.target.value)}
-                  placeholder="start 40s"
-                  className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
-                />
-              </div>
-            )}
-          </Field>
+          <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
+            <Field label={f.replicas}>
+              <input
+                value={replicas}
+                onChange={(event) => setReplicas(event.target.value)}
+                type="number"
+                min={1}
+                max={10}
+                inputMode="numeric"
+                className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {f.replicasHint}
+              </p>
+            </Field>
+            <Field label={f.healthcheck}>
+              <input
+                value={hcTest}
+                onChange={(event) => setHcTest(event.target.value)}
+                placeholder="curl -f http://localhost:3000/health || exit 1"
+                className="h-11 w-full rounded-xl border border-border/50 bg-muted/20 px-3 text-sm text-foreground outline-none transition-colors focus:border-primary/40"
+              />
+              <p className="mt-1 text-xs text-muted-foreground">
+                {f.healthcheckHint}
+              </p>
+              {hcTest.trim() && (
+                <div className="mt-2 grid gap-2 sm:grid-cols-4">
+                  <input
+                    value={hcInterval}
+                    onChange={(event) => setHcInterval(event.target.value)}
+                    placeholder="interval 30s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcTimeout}
+                    onChange={(event) => setHcTimeout(event.target.value)}
+                    placeholder="timeout 10s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcRetries}
+                    onChange={(event) => setHcRetries(event.target.value)}
+                    placeholder="retries 3"
+                    inputMode="numeric"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                  <input
+                    value={hcStartPeriod}
+                    onChange={(event) => setHcStartPeriod(event.target.value)}
+                    placeholder="start 40s"
+                    className="h-10 w-full rounded-lg border border-border/50 bg-muted/20 px-2.5 text-sm text-foreground outline-none focus:border-primary/40"
+                  />
+                </div>
+              )}
+            </Field>
+          </div>
         )}
 
         <label
@@ -453,7 +501,7 @@ export function ServiceSettingsForm({ service, onSubmit }: ServiceSettingsFormPr
           className="inline-flex h-10 items-center gap-2 rounded-xl bg-primary px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-50"
         >
           {saving ? <Loader2 className="size-4 animate-spin" /> : <Save className="size-4" />}
-          {f.saveChanges}
+          {saving ? (savingLabel ?? f.saveChanges) : f.saveChanges}
         </button>
       </div>
     </form>

@@ -3,7 +3,7 @@
  */
 
 import { repos } from "@repo/db";
-import { ValidationError, SYSTEM } from "@repo/core";
+import { ValidationError, SYSTEM, normalizeEnvironment } from "@repo/core";
 import { encrypt, decrypt } from "../../lib/encryption";
 import { assertResourceInOrg } from "../../lib/controller-helpers";
 import type { TMergeEnvVarsBody } from "./project.schema";
@@ -18,7 +18,10 @@ export async function listEnvVars(
   const p = await repos.project.findById(projectId);
   assertResourceInOrg(p, "Project", organizationId, projectId);
 
-  const vars = await repos.project.listEnvVars(projectId, environment);
+  const vars = await repos.project.listEnvVars(
+    projectId,
+    environment ? normalizeEnvironment(environment) : undefined,
+  );
 
   return vars.map((v) => {
     let plainValue: string;
@@ -83,8 +86,12 @@ export async function mergeEnvVars(
     isSecret: v.isSecret,
   }));
 
-  await repos.project.mergeEnvVars(projectId, data.environment, encrypted, data.deletes);
+  await repos.project.mergeEnvVars(
+    projectId,
+    normalizeEnvironment(data.environment),
+    encrypted,
+    data.deletes,
+  );
   return { upserted: data.upserts.length, deleted: data.deletes.length };
 }
-
 

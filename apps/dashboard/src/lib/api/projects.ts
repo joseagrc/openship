@@ -79,6 +79,7 @@ export const projectsApi = {
     /** Source discriminator; "upload" for browser folder-upload projects. */
     gitProvider?: string;
     gitRepo?: string;
+    gitUrl?: string;
     gitBranch?: string;
     framework?: string;
     localPath?: string;
@@ -170,13 +171,29 @@ export const projectsApi = {
     body: {
       environmentName: string;
       environmentSlug?: string;
-      environmentType?: "production" | "preview" | "development";
+      environmentType?: "production" | "staging" | "preview" | "development";
       gitBranch?: string;
       sourceMode?: "branch" | "manual";
     },
   ) =>
     api.post<{ success: boolean; data?: any; error?: string }>(
       endpoints.projects.environments(id),
+      body,
+    ),
+
+  /** Update an environment label, type, or deploy branch */
+  updateEnvironment: (
+    id: string | number,
+    environmentId: string | number,
+    body: {
+      environmentName?: string;
+      environmentSlug?: string;
+      environmentType?: "production" | "staging" | "preview" | "development";
+      gitBranch?: string;
+    },
+  ) =>
+    api.patch<{ success: boolean; data?: any; error?: string }>(
+      endpoints.projects.environment(id, environmentId),
       body,
     ),
 

@@ -57,7 +57,7 @@ import * as CountryFlags from "country-flag-icons/react/3x2";
 const FLAGS = CountryFlags as Record<string, React.ComponentType<{ title?: string; className?: string }>>;
 
 type Tab = "overview" | "migrations" | "components" | "github" | "security" | "ports" | "terminal";
-type ManualActionMode = "remove" | null;
+type ManualActionMode = "remove" | "repair" | null;
 
 interface TabDef {
   key: Tab;
@@ -143,6 +143,7 @@ export default function ServerDetailPage({
   const [manualActionMode, setManualActionMode] = useState<ManualActionMode>(null);
   const [manualActionDone, setManualActionDone] = useState(false);
   const [manualActionFinalStatus, setManualActionFinalStatus] = useState<"completed" | "failed" | null>(null);
+  const [isRepairing, setIsRepairing] = useState(false);
 
   const setupStream = useSetupStream({
     onComplete: (event) => {
@@ -326,6 +327,77 @@ export default function ServerDetailPage({
       showToast(message, "error", t.servers.toastTitles.serverSetup);
     }
   }, [serverId, setupStream, showToast, t]);
+
+  const repairComponentAction = useCallback(async (component: ComponentStatus) => {
+    if (!serverId) {
+      showToast(t.servers.detail.toastServerMissing, "error", t.servers.toastTitles.serverSetup);
+      return;
+    }
+
+    try {
+      setActiveActionComponent(component.name);
+      setIsRepairing(true);
+      setManualActionMode("repair");
+      setManualActionDone(false);
+      setManualActionFinalStatus(null);
+      setManualActionComponents([
+        {
+          name: component.name,
+          label: component.label,
+          status: "installing",
+        },
+      ]);
+      setCheckError(null);
+      setInstallLogs([]);
+      setActiveTab("components");
+
+      const result = await systemApi.repairComponent(serverId, component.name);
+      setInstallLogs((result.logs ?? []).map((message) => ({
+        type: "log",
+        timestamp: new Date().toISOString(),
+        component: component.name,
+        message,
+        level: "info" as const,
+      })));
+      setManualActionComponents([
+        {
+          name: component.name,
+          label: component.label,
+          status: "installed",
+        },
+      ]);
+      setManualActionDone(true);
+      setManualActionFinalStatus("completed");
+
+      const next = await systemApi.checkServer(serverId);
+      setComponents(next.components);
+      showToast(interpolate(t.servers.detail.toastComponentRepaired, { label: component.label }), "success", t.servers.toastTitles.serverSetup);
+    } catch (err) {
+      const message = getApiErrorMessage(err, interpolate(t.servers.detail.toastFailedRepair, { label: component.label }));
+      setInstallLogs((prev) => prev.length > 0 ? prev : [{
+        type: "log",
+        timestamp: new Date().toISOString(),
+        component: component.name,
+        message,
+        level: "error" as const,
+      }]);
+      setManualActionComponents([
+        {
+          name: component.name,
+          label: component.label,
+          status: "failed",
+          error: message,
+        },
+      ]);
+      setManualActionDone(true);
+      setManualActionFinalStatus("failed");
+      setCheckError(message);
+      showToast(message, "error", t.servers.toastTitles.serverSetup);
+    } finally {
+      setActiveActionComponent(null);
+      setIsRepairing(false);
+    }
+  }, [serverId, showToast, t]);
 
   const removeComponentAction = useCallback((component: ComponentStatus) => {
     const modalId = showModal({
@@ -569,7 +641,7 @@ export default function ServerDetailPage({
 
   const allHealthy =
     components.length > 0 && components.every((c) => c.healthy);
-  const actionBusy = setupStream.isConnected || setupStream.isConnecting || isRemoving;
+  const actionBusy = setupStream.isConnected || setupStream.isConnecting || isRemoving || isRepairing;
   const visibleActionComponents = manualActionComponents.length > 0
     ? manualActionComponents
     : setupStream.components;
@@ -737,6 +809,7 @@ export default function ServerDetailPage({
                 onInstallMissing={installMissingComponents}
                 onRunComponentAction={runComponentAction}
                 onRemoveComponentAction={removeComponentAction}
+                onRepairComponentAction={repairComponentAction}
                 busy={actionBusy}
                 activeActionComponent={activeActionComponent}
                 installDone={visibleActionDone}

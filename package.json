@@ -40,7 +40,7 @@
     "dev:clean": "turbo run clean && rm -rf node_modules",
     "clean:modules": "find apps packages -name node_modules -type d -prune -exec rm -rf {} + && rm -rf node_modules",
     "release": "bun scripts/release.ts",
-    "prepare": "git config core.hooksPath .githooks || true"
+    "prepare": "command -v git >/dev/null 2>&1 && git config core.hooksPath .githooks || true"
   },
   "devDependencies": {
     "prettier": "^3.8.1",

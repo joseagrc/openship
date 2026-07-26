@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "directus",
   "name": "Directus",
   "description": "Headless CMS with an instant REST + GraphQL API over your data. Create the admin on first visit.",

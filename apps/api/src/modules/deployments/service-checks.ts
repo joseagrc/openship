@@ -1,5 +1,5 @@
 import { repos, type Project, type Deployment } from "@repo/db";
-import { isServiceSuccessStatus, isServiceFailureStatus } from "@repo/core";
+import { isGitHubProvider, isServiceSuccessStatus, isServiceFailureStatus } from "@repo/core";
 import { runtimeTarget } from "../../config";
 import { buildBackgroundContext } from "../../lib/request-context";
 import { createCheckRun, updateCheckRun } from "../github/github.service";
@@ -95,7 +95,7 @@ export async function emitServiceCheckRun(opts: {
   output?: { title: string; summary: string };
 }): Promise<void> {
   const { project, dep, serviceDeploymentId, serviceName, phase, conclusion, output } = opts;
-  if (!project.gitOwner || !project.gitRepo || !dep.commitSha) return;
+  if (!isGitHubProvider(project.gitProvider) || !project.gitOwner || !project.gitRepo || !dep.commitSha) return;
 
   const orgMembers = await repos.member
     .listByOrganization(dep.organizationId)

@@ -9,7 +9,7 @@
  */
 
 import type { Context } from "hono";
-import { AppError } from "@repo/core";
+import { AppError, normalizeEnvironment } from "@repo/core";
 import { streamSSE } from "../../lib/sse";
 import { param } from "../../lib/controller-helpers";
 import { getRequestContext } from "../../lib/request-context";
@@ -19,6 +19,7 @@ import type {
   TCreateServiceBody,
   TUpdateServiceBody,
   TSetServiceEnvVarsBody,
+  TUpgradeServiceImageBody,
 } from "./service.schema";
 
 // ─── List services for a project ─────────────────────────────────────────────
@@ -155,10 +156,15 @@ export async function listEnvVars(c: Context) {
   const ctx = getRequestContext(c);
   const projectId = param(c, "id");
   const serviceId = param(c, "serviceId");
-  const environment = c.req.query("environment") || undefined;
+  const environment = c.req.query("environment");
 
   try {
-    const vars = await serviceService.listServiceEnvVars(ctx, projectId, serviceId, environment);
+    const vars = await serviceService.listServiceEnvVars(
+      ctx,
+      projectId,
+      serviceId,
+      environment ? normalizeEnvironment(environment) : undefined,
+    );
     return c.json({ success: true, vars });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to list env vars";
@@ -173,7 +179,10 @@ export async function setEnvVars(c: Context) {
   const body = await c.req.json<TSetServiceEnvVarsBody>();
 
   try {
-    const result = await serviceService.setServiceEnvVars(ctx, projectId, serviceId, body);
+    const result = await serviceService.setServiceEnvVars(ctx, projectId, serviceId, {
+      ...body,
+      environment: normalizeEnvironment(body.environment),
+    });
     return c.json({ success: true, ...result });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to set env vars";
@@ -275,6 +284,20 @@ export async function restartContainer(c: Context) {
     return c.json({ success: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to restart container";
+    return c.json({ success: false, error: message }, 400);
+  }
+}
+
+export async function upgradeImage(c: Context) {
+  const ctx = getRequestContext(c);
+  const projectId = param(c, "id");
+  const serviceId = param(c, "serviceId");
+  const body = await c.req.json<TUpgradeServiceImageBody>();
+  try {
+    const result = await serviceService.upgradeServiceImage(ctx, projectId, serviceId, body);
+    return c.json({ success: true, ...result });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to upgrade image";
     return c.json({ success: false, error: message }, 400);
   }
 }

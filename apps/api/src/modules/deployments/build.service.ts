@@ -23,7 +23,9 @@ import {
   STACKS,
   safeErrorMessage,
   getRuntimeImage,
+  normalizeEnvironment,
   isReleaseProvider,
+  isGitHubProvider,
   type StackId,
   type DeployTarget,
   type BuildStrategy,
@@ -116,6 +118,7 @@ export async function runDeploymentPreflight(
      *  GitHub App is installed for this owner before the build pipeline
      *  spends resources cloning a repo it can't access. */
     gitOwner?: string | null;
+    gitProvider?: string | null;
     /** Project id — passed to the remote-clone-token preflight check so
      *  project-scoped clone tokens are considered. */
     projectId?: string;
@@ -132,6 +135,7 @@ export async function runDeploymentPreflight(
     ...(opts.composeServices ? { composeServices: opts.composeServices } : {}),
     ...(opts.multiService !== undefined ? { multiService: opts.multiService } : {}),
     ...(opts.gitOwner !== undefined ? { gitOwner: opts.gitOwner } : {}),
+    ...(opts.gitProvider !== undefined ? { gitProvider: opts.gitProvider } : {}),
     ...(opts.projectId !== undefined ? { projectId: opts.projectId } : {}),
     buildStrategy: snapshot.buildStrategy as "local" | "server" | undefined,
   });
@@ -400,7 +404,7 @@ function stripV(v: string | null | undefined): string | undefined {
 }
 
 async function resolveLatestCommitInfo(ctx: RequestContext, project: Project, branch: string) {
-  if (!project.gitOwner || !project.gitRepo) {
+  if (!isGitHubProvider(project.gitProvider) || !project.gitOwner || !project.gitRepo) {
     return {};
   }
 
@@ -412,12 +416,24 @@ async function resolveProjectBranch(ctx: RequestContext, project: Project, branc
   const configuredBranch = branch?.trim() || project.gitBranch?.trim();
   if (configuredBranch) return configuredBranch;
 
-  if (project.gitOwner && project.gitRepo) {
+  if (isGitHubProvider(project.gitProvider) && project.gitOwner && project.gitRepo) {
     const repository = await getRepository(ctx, project.gitOwner, project.gitRepo);
     return repository.default_branch;
   }
 
   return "main";
+}
+
+function normalizeProjectEnvironment(project: Project): "production" | "staging" | "development" {
+  return normalizeEnvironment(project.environmentType || project.environmentSlug || "production");
+}
+
+async function resolveProjectForEnvironment(project: Project, environment: string): Promise<Project> {
+  const normalized = normalizeEnvironment(environment);
+  if (normalizeProjectEnvironment(project) === normalized) return project;
+
+  const siblings = await repos.project.listByGroup(project.groupId);
+  return siblings.find((row) => normalizeProjectEnvironment(row) === normalized) ?? project;
 }
 
 /**
@@ -441,7 +457,7 @@ async function reconcileComposeDrift(
   changedPaths?: string[] | null,
 ) {
   try {
-    if (!project.gitOwner || !project.gitRepo) return; // local/no-git source → nothing to re-parse
+    if (!isGitHubProvider(project.gitProvider) || !project.gitOwner || !project.gitRepo) return;
     if (changedPaths && changedPaths.length > 0 && !changedPaths.some((p) => COMPOSE_PATH_RE.test(p))) {
       return; // this push didn't touch the compose file → no drift possible
     }
@@ -841,10 +857,12 @@ export async function requestBuildAccess(ctx: RequestContext, input: BuildAccess
   // a member can deploy a GitHub-backed project only when granted this
   // repo. Hard-stop here so they can't fall through to their personal
   // token on a local build (owner-control bypass) or fail mid-build.
-  await assertGitHubRepoAccess(ctx, {
-    owner: project.gitOwner,
-    repo: project.gitRepo,
-  });
+  if (isGitHubProvider(project.gitProvider)) {
+    await assertGitHubRepoAccess(ctx, {
+      owner: project.gitOwner,
+      repo: project.gitRepo,
+    });
+  }
 
   await checkNoActiveBuild(project.id);
 
@@ -1011,6 +1029,7 @@ export async function requestBuildAccess(ctx: RequestContext, input: BuildAccess
     composeServices: servicePreflightServices,
     multiService: useServicePipeline,
     gitOwner: project.gitOwner,
+    gitProvider: project.gitProvider,
     projectId: project.id,
   });
   const env = environment || "production";
@@ -1170,10 +1189,12 @@ export async function redeployBuildSession(
   }
   // GitHub access gate (default-deny): a member can redeploy a
   // GitHub-backed project only when granted this repo.
-  await assertGitHubRepoAccess(ctx, {
-    owner: project.gitOwner,
-    repo: project.gitRepo,
-  });
+  if (isGitHubProvider(project.gitProvider)) {
+    await assertGitHubRepoAccess(ctx, {
+      owner: project.gitOwner,
+      repo: project.gitRepo,
+    });
+  }
   const resolvedBranch = await resolveProjectBranch(ctx, project, oldDep.branch ?? undefined);
 
   // Prefer the old deployment's snapshot; fall back to a fresh one from the project
@@ -1403,10 +1424,15 @@ export async function triggerDeployment(
     releaseVersion?: string;
   },
 ) {
-  const project = await repos.project.findById(data.projectId);
+  let project = await repos.project.findById(data.projectId);
   if (!project) {
     throw new NotFoundError("Project", data.projectId);
   }
+  const environment = normalizeEnvironment(
+    data.environment || project.environmentType || project.environmentSlug,
+  );
+  project = await resolveProjectForEnvironment(project, environment);
+
   // The Openship control plane IS the running host service, not a redeployable
   // workload — it updates itself via the CLI. It's a release-provider project, so
   // the git/localPath 403 below would NOT catch it; guard it explicitly.
@@ -1425,13 +1451,14 @@ export async function triggerDeployment(
   }
   // GitHub access gate (default-deny; webhook ctx is the org owner and
   // passes). Covers manual trigger / redeploy paths routed through here.
-  await assertGitHubRepoAccess(ctx, {
-    owner: project.gitOwner,
-    repo: project.gitRepo,
-  });
+  if (isGitHubProvider(project.gitProvider)) {
+    await assertGitHubRepoAccess(ctx, {
+      owner: project.gitOwner,
+      repo: project.gitRepo,
+    });
+  }
 
   const branch = await resolveProjectBranch(ctx, project, data.branch);
-  const environment = data.environment ?? "production";
 
   // Skip an auto (webhook) deploy whose commit is already in-flight or live —
   // closes the App + repo-webhook double-deploy window. Manual/forceAll bypass.
@@ -1517,6 +1544,7 @@ export async function triggerDeployment(
     composeServices: servicePreflightServices,
     multiService: useServicePipeline,
     gitOwner: project.gitOwner,
+    gitProvider: project.gitProvider,
     projectId: project.id,
   });
 

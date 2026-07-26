@@ -1,5 +1,5 @@
 {
-  "available": false,
+  "available": true,
   "id": "code-server",
   "name": "code-server",
   "description": "Run VS Code in your browser, on your server. Login uses an auto-generated password.",

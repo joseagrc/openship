@@ -3,7 +3,7 @@
  */
 
 import { normalizeRoutingFields, repos, composeSpecDiff, type Service, type ServicePublicEndpoint } from "@repo/db";
-import { serviceStatusToContainerState, isValidCustomHostname, ValidationError, type ServiceContainerState } from "@repo/core";
+import { serviceStatusToContainerState, isValidCustomHostname, ValidationError, type ComposeAdvanced, type ServiceContainerState } from "@repo/core";
 import {
   BuildLogger,
   DockerRuntime,
@@ -36,6 +36,7 @@ import type {
   TCreateServiceBody,
   TUpdateServiceBody,
   TSetServiceEnvVarsBody,
+  TUpgradeServiceImageBody,
 } from "./service.schema";
 
 /** Cap how long a route update AWAITS the (SSH) edge re-register before
@@ -66,6 +67,41 @@ const trimOrNull = (value?: string | null) => {
   const trimmed = value?.trim();
   return trimmed || null;
 };
+
+const hasPublishedHostPort = (port: string) => port.includes(":");
+
+function normalizePortsForReplicas(
+  ports: string[] | null | undefined,
+  advanced: ComposeAdvanced | null | undefined,
+) {
+  const list = ports ?? [];
+  const replicas = advanced?.replicas ?? 1;
+  if (replicas <= 1) return list;
+  return list.map((port) => {
+    if (!hasPublishedHostPort(port)) return port;
+    return port.split(":").at(-1)?.trim() || port;
+  });
+}
+
+function validateStatelessReplicas(input: {
+  name: string;
+  advanced?: ComposeAdvanced | null;
+  volumes?: string[] | null;
+  ports?: string[] | null;
+}) {
+  const replicas = input.advanced?.replicas ?? 1;
+  if (replicas <= 1) return;
+
+  const volumes = input.volumes ?? [];
+  if (volumes.length > 0) {
+    throw new Error(`Service "${input.name}" uses volumes, so replicas must stay at 1 until stateful scaling is supported.`);
+  }
+
+  const hostPublished = (input.ports ?? []).filter(hasPublishedHostPort);
+  if (hostPublished.length > 0) {
+    throw new Error(`Service "${input.name}" publishes fixed host ports, so replicas must stay at 1.`);
+  }
+}
 
 /**
  * Patch-level wrapper around the canonical `normalizeRoutingFields` from
@@ -233,6 +269,13 @@ export async function createService(
     domainType: data.domainType ?? (monorepoDefaults ? "free" : undefined),
     publicEndpoints: data.publicEndpoints,
   });
+  const ports = normalizePortsForReplicas(data.ports, data.advanced);
+  validateStatelessReplicas({
+    name,
+    advanced: data.advanced,
+    volumes: data.volumes,
+    ports,
+  });
 
   const created = await repos.service.create({
     projectId,
@@ -241,7 +284,7 @@ export async function createService(
     image: trimOrNull(data.image),
     build: trimOrNull(data.build),
     dockerfile: trimOrNull(data.dockerfile),
-    ports: data.ports ?? [],
+    ports,
     dependsOn: data.dependsOn ?? [],
     environment: data.environment ?? {},
     volumes: data.volumes ?? [],
@@ -370,6 +413,23 @@ export async function updateService(
       "managed-compose-domains",
     );
   }
+
+  const candidateAdvanced = "advanced" in patch ? patch.advanced : svc.advanced;
+  const candidateVolumes = "volumes" in patch ? patch.volumes : svc.volumes;
+  const candidatePorts = normalizePortsForReplicas(
+    "ports" in patch ? patch.ports : svc.ports,
+    candidateAdvanced,
+  );
+  const candidateReplicas = (candidateAdvanced as ComposeAdvanced | null | undefined)?.replicas ?? 1;
+  if (candidateReplicas > 1) {
+    patch.ports = candidatePorts;
+  }
+  validateStatelessReplicas({
+    name: typeof patch.name === "string" ? patch.name : svc.name,
+    advanced: candidateAdvanced,
+    volumes: candidateVolumes,
+    ports: candidatePorts,
+  });
 
   await repos.service.update(serviceId, patch);
   const updated = await repos.service.findById(serviceId);
@@ -1046,6 +1106,46 @@ export async function startServiceContainer(
   return provisionServiceContainer(ctx, projectId, serviceId);
 }
 
+export async function upgradeServiceImage(
+  ctx: RequestContext,
+  projectId: string,
+  serviceId: string,
+  data: TUpgradeServiceImageBody,
+) {
+  const image = data.image.trim();
+  if (!image) throw new Error("image-required");
+
+  const { svc } = await assertServiceAccess(ctx, projectId, serviceId);
+  if (svc.build) {
+    throw new Error("Image upgrade is only available for image-only services. Use Redeploy for source-built services.");
+  }
+  if (!svc.image) {
+    throw new Error("Service has no current image configured.");
+  }
+  if (svc.image === image) {
+    return {
+      service: svc,
+      containerId: null,
+      changed: false,
+    };
+  }
+
+  await repos.service.update(serviceId, { image });
+  try {
+    const provisioned = await provisionServiceContainer(ctx, projectId, serviceId);
+    const updated = await repos.service.findById(serviceId);
+    return {
+      service: updated,
+      containerId: provisioned.containerId,
+      ip: provisioned.ip,
+      changed: true,
+    };
+  } catch (err) {
+    await repos.service.update(serviceId, { image: svc.image });
+    throw err;
+  }
+}
+
 export async function stopServiceContainer(
   ctx: RequestContext,
   projectId: string,
@@ -1128,4 +1228,3 @@ export async function streamServiceRuntimeLogs(
   };
   return { cleanup, serverId };
 }
-

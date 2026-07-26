@@ -15,6 +15,9 @@ import {
   isReleaseProvider,
   isBehind,
   GITHUB_REPO,
+  normalizeEnvironment,
+  isGitHubProvider,
+  parseGitRepositoryUrl,
   type ReleaseSource,
   type UpdatableIdentity,
 } from "@repo/core";
@@ -219,6 +222,15 @@ function projectGitUrl(owner?: string | null, repo?: string | null) {
   return owner && repo ? `https://github.com/${owner}/${repo}.git` : undefined;
 }
 
+function sanitizeGitCloneUrl(value?: string | null) {
+  const trimmed = value?.trim();
+  if (!trimmed) return undefined;
+  if (/^https?:\/\//i.test(trimmed) || /^ssh:\/\//i.test(trimmed) || /^git@[^:]+:.+$/i.test(trimmed)) {
+    return trimmed;
+  }
+  throw new ValidationError("gitUrl must be an HTTPS or SSH Git URL");
+}
+
 function resolveProjectSource(data: TCreateProjectBody) {
   // Release/dist source: a prebuilt dist, no git repo and no stored localPath
   // (its dir is resolved per-deploy). The source repo, if any, lives in
@@ -233,15 +245,25 @@ function resolveProjectSource(data: TCreateProjectBody) {
     throw new ForbiddenError("Release/dist source projects are not available in cloud mode");
   }
   const safeLocalPath = !isRelease && data.localPath && !env.CLOUD_MODE ? data.localPath : undefined;
-  const gitOwner = isRelease || safeLocalPath ? undefined : data.gitOwner;
-  const gitRepo = isRelease || safeLocalPath ? undefined : data.gitRepo;
+  const parsedGitUrl = data.gitUrl ? parseGitRepositoryUrl(data.gitUrl, data.gitProvider) : null;
+  const requestedProvider = parsedGitUrl?.provider ?? data.gitProvider ?? "github";
+  const genericGitUrl =
+    !isRelease && !safeLocalPath && !isGitHubProvider(requestedProvider)
+      ? sanitizeGitCloneUrl(data.gitUrl)
+      : undefined;
+  const explicitGitHubUrl =
+    !isRelease && !safeLocalPath && !genericGitUrl && parsedGitUrl && isGitHubProvider(requestedProvider)
+      ? sanitizeGitCloneUrl(data.gitUrl)
+      : undefined;
+  const gitOwner = isRelease || safeLocalPath ? undefined : (genericGitUrl ? parsedGitUrl?.owner : data.gitOwner);
+  const gitRepo = isRelease || safeLocalPath ? undefined : (genericGitUrl ? parsedGitUrl?.repo : data.gitRepo);
 
   return {
     safeLocalPath,
     gitOwner,
     gitRepo,
-    gitProvider: isRelease ? "release" : safeLocalPath ? "local" : (data.gitProvider ?? "github"),
-    gitUrl: projectGitUrl(gitOwner, gitRepo),
+    gitProvider: isRelease ? "release" : safeLocalPath ? "local" : requestedProvider,
+    gitUrl: genericGitUrl ?? explicitGitHubUrl ?? projectGitUrl(gitOwner, gitRepo),
     releaseSource: isRelease ? ((data.releaseSource as ReleaseSource | undefined) ?? null) : null,
   };
 }
@@ -1150,8 +1172,9 @@ export async function createProjectEnvironment(
     "development",
   );
   const environmentName = data.environmentName?.trim() || environmentNameFromSlug(environmentSlug);
-  const environmentType =
-    data.environmentType ?? (environmentSlug === "production" ? "production" : "development");
+  const environmentType = normalizeEnvironment(
+    data.environmentType ?? (environmentSlug === "production" ? "production" : "development"),
+  );
 
   const existing = (await repos.project.listByGroup(base.groupId)).find(
     (row) => row.environmentSlug === environmentSlug,
@@ -1167,7 +1190,13 @@ export async function createProjectEnvironment(
   );
 
   let productionBranch = base.gitBranch ?? undefined;
-  if (!productionBranch && environmentType === "production" && base.gitOwner && base.gitRepo) {
+  if (
+    !productionBranch &&
+    environmentType === "production" &&
+    isGitHubProvider(base.gitProvider) &&
+    base.gitOwner &&
+    base.gitRepo
+  ) {
     // userId here is the actor who triggered the action — used to authorize
     // the GitHub call against their installation token.
     productionBranch = await resolveDefaultBranch(ctx, base.gitOwner, base.gitRepo);
@@ -1177,7 +1206,13 @@ export async function createProjectEnvironment(
     data.gitBranch?.trim() ||
     (environmentType === "production" ? (productionBranch ?? "main") : environmentSlug);
 
-  if ((data.sourceMode ?? "branch") === "branch" && base.gitOwner && base.gitRepo && gitBranch) {
+  if (
+    (data.sourceMode ?? "branch") === "branch" &&
+    isGitHubProvider(base.gitProvider) &&
+    base.gitOwner &&
+    base.gitRepo &&
+    gitBranch
+  ) {
     const branches = await listGitHubBranches(ctx, base.gitOwner, base.gitRepo);
     const exists = branches.some((branch) => branch.name === gitBranch);
     if (!exists) {
@@ -1239,6 +1274,69 @@ export async function createProjectEnvironment(
   return environmentSummary(created);
 }
 
+export async function updateProjectEnvironment(
+  projectId: string,
+  environmentId: string,
+  ctx: RequestContext,
+  data: {
+    environmentName?: string;
+    environmentSlug?: string;
+    environmentType?: string;
+    gitBranch?: string;
+  },
+) {
+  const { organizationId } = ctx;
+  const base = await repos.project.findById(projectId);
+  assertResourceInOrg(base, "Project", organizationId, projectId);
+  const target = await repos.project.findById(environmentId);
+  assertResourceInOrg(target, "Project", organizationId, environmentId);
+
+  if (target.groupId !== base.groupId) {
+    throw new NotFoundError("Environment", environmentId);
+  }
+
+  const patch: Partial<NewProject> = {};
+
+  if (data.environmentName !== undefined) {
+    const name = data.environmentName.trim();
+    if (!name) throw new ValidationError("Environment name is required");
+    patch.environmentName = name;
+  }
+
+  if (data.environmentSlug !== undefined) {
+    const slug = normalizeEnvironmentSlug(data.environmentSlug, target.environmentSlug);
+    const sibling = (await repos.project.listByGroup(base.groupId)).find(
+      (row) => row.id !== environmentId && row.environmentSlug === slug,
+    );
+    if (sibling) throw new ConflictError(`Environment "${slug}" already exists`);
+    patch.environmentSlug = slug;
+  }
+
+  if (data.environmentType !== undefined) {
+    patch.environmentType = normalizeEnvironment(data.environmentType);
+  }
+
+  if (data.gitBranch !== undefined) {
+    const gitBranch = data.gitBranch.trim();
+    if (!gitBranch) throw new ValidationError("Git branch is required");
+    if (isGitHubProvider(target.gitProvider) && target.gitOwner && target.gitRepo) {
+      const branches = await listGitHubBranches(ctx, target.gitOwner, target.gitRepo);
+      const exists = branches.some((branch) => branch.name === gitBranch);
+      if (!exists) {
+        throw new ValidationError(`Branch "${gitBranch}" was not found for ${target.gitOwner}/${target.gitRepo}`);
+      }
+    }
+    patch.gitBranch = gitBranch;
+  }
+
+  if (Object.keys(patch).length > 0) {
+    await repos.project.update(environmentId, patch);
+  }
+
+  const updated = await repos.project.findById(environmentId);
+  return environmentSummary(updated ?? target);
+}
+
 // ─── Git info ────────────────────────────────────────────────────────────────
 
 /**
@@ -1283,7 +1381,7 @@ export async function getProjectCommitStatus(
   }
 
   // Commit-source: only GitHub-backed projects have a remote branch HEAD to compare against.
-  if (!p.gitOwner || !p.gitRepo) {
+  if (!isGitHubProvider(p.gitProvider) || !p.gitOwner || !p.gitRepo) {
     // Repo-less services/app projects (n8n/Convex/…): image-tag/digest drift.
     // Returns {supported:false} when the project has no image services.
     return getImageDriftStatus(p);
@@ -1482,13 +1580,13 @@ export async function getGitInfo(projectId: string, organizationId: string) {
 export async function setBranch(
   projectId: string,
   branch: string,
-  organizationId: string,
+  ctx: RequestContext,
 ) {
   const p = await repos.project.findById(projectId);
-  assertResourceInOrg(p, "Project", organizationId, projectId);
+  assertResourceInOrg(p, "Project", ctx.organizationId, projectId);
 
-  await repos.project.update(projectId, { gitBranch: branch });
-  return { success: true, branch };
+  const updated = await updateProjectEnvironment(projectId, projectId, ctx, { gitBranch: branch });
+  return { success: true, branch: updated.gitBranch };
 }
 
 // ─── Build options ───────────────────────────────────────────────────────────
@@ -1581,4 +1679,3 @@ export async function getLatestDeploymentSession(
       : null,
   };
 }
-

@@ -37,6 +37,9 @@ const TTL_MS = 600_000; // 10 minutes
 /** Catalog-ENVELOPE version we know how to read (the top-level `version`). A
  *  newer envelope is logged, not fatal — entries are gated individually. */
 const MAX_CATALOG_VERSION = 1;
+const REMOTE_ENABLED = !["0", "false", "off", "no"].includes(
+  (process.env.OPENSHIP_APP_CATALOG_REMOTE ?? "true").trim().toLowerCase(),
+);
 
 /** A resolved catalog entry: a template, possibly a lightweight placeholder that
  *  needs a newer Openship to install. */
@@ -184,6 +187,10 @@ async function fetchRemote(): Promise<{ entries: AppTemplate[]; tooNew: Resolved
 }
 
 function refresh(): void {
+  if (!REMOTE_ENABLED) {
+    cachedAt = Date.now();
+    return;
+  }
   if (refreshing) return;
   refreshing = true;
   void fetchRemote()

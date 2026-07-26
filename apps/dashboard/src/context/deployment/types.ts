@@ -241,6 +241,8 @@ export interface DeploymentConfig {
   projectName: string;
   repo: string;
   owner: string;
+  gitProvider?: string;
+  gitUrl?: string;
   /** Absolute path for local projects (mutually exclusive with owner/repo git source) */
   localPath?: string;
   /** Folder-upload deploy: the upload session whose workspace/staging dir holds
@@ -733,6 +735,10 @@ export interface DeploymentContextType {
   initializeFromLocal: (
     path: string,
     context?: { projectId?: string },
+  ) => Promise<{ success: boolean; error?: string; errorType?: string }>;
+  initializeFromGitUrl: (
+    url: string,
+    context?: { branch?: string; projectId?: string; provider?: string },
   ) => Promise<{ success: boolean; error?: string; errorType?: string }>;
   /** Folder-upload hydration — seed from the user-picked stack's defaults
    *  (no auto-detection); falls back to the session scan when no stack given. */

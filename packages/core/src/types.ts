@@ -12,7 +12,7 @@ export type DeploymentStatus =
   | "failed"
   | "cancelled";
 
-export type Environment = "production" | "preview" | "development";
+export type { Environment } from "./environments";
 
 import type { StackId, Language } from "./stacks";
 
@@ -121,6 +121,12 @@ export type ComposeHealthcheck = {
  */
 export type ComposeAdvanced = {
   healthcheck?: ComposeHealthcheck;
+  /**
+   * Desired stateless replica count. Stored now so compose imports and the UI
+   * can preserve intent; runtimes may warn-and-ignore until they support
+   * balanced multi-container service workloads.
+   */
+  replicas?: number;
   /**
    * Generated config files bind-mounted (read-only) into this service's
    * container at deploy — seeded from an app template's `files` (e.g. Kong's

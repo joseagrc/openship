@@ -44,7 +44,14 @@ export class DockerEdgeExecutor implements CommandExecutor {
       AttachStderr: true,
       Tty: false,
     });
-    const stream = await exec.start({ hijack: true, stdin: false });
+    // Docker exec is non-interactive here (openresty -t/-s reload, certbot).
+    // Starting it with `hijack:true` asks dockerode to expect a connection
+    // upgrade; some Docker daemon/proxy combinations return the normal
+    // multiplexed exec stream with HTTP 101 and dockerode raises
+    // "(HTTP code 101) unexpected" even though the command ran successfully.
+    // The standard exec-start stream is still multiplexed for Tty:false and is
+    // exactly what demuxStream expects.
+    const stream = await exec.start({ Detach: false, Tty: false });
 
     const outStream = new PassThrough();
     const errStream = new PassThrough();

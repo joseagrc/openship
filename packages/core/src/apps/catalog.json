@@ -852,8 +852,11 @@
           "environment": {
             "N8N_PORT": "5678",
             "N8N_PROTOCOL": "https",
+            "N8N_LISTEN_ADDRESS": "0.0.0.0",
             "GENERIC_TIMEZONE": "UTC",
-            "WEBHOOK_URL": "{{publicUrl:n8n}}"
+            "WEBHOOK_URL": "{{publicUrl:n8n}}/",
+            "N8N_EDITOR_BASE_URL": "{{publicUrl:n8n}}/",
+            "NODE_OPTIONS": "--max-old-space-size=384"
           },
           "secretEnv": [
             "N8N_ENCRYPTION_KEY"
@@ -930,7 +933,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "ghost",
       "name": "Ghost",
       "description": "Modern publishing platform for blogs, newsletters, and membership sites.",
@@ -953,6 +956,15 @@
           "secretEnv": [
             "MYSQL_ROOT_PASSWORD"
           ],
+          "healthcheck": {
+            "test": [
+              "CMD-SHELL",
+              "mysqladmin ping -uroot -p\"$MYSQL_ROOT_PASSWORD\" --silent"
+            ],
+            "interval": "10s",
+            "timeout": "5s",
+            "retries": 30
+          },
           "volumes": [
             "ghost_db:/var/lib/mysql"
           ],
@@ -1006,7 +1018,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "directus",
       "name": "Directus",
       "description": "Headless CMS with an instant REST + GraphQL API over your data. Create the admin on first visit.",
@@ -1055,7 +1067,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "nocodb",
       "name": "NocoDB",
       "description": "Airtable-style spreadsheet UI over an SQL database. The first sign-up becomes the admin.",
@@ -1085,7 +1097,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "metabase",
       "name": "Metabase",
       "description": "Open-source business intelligence — dashboards and questions over your data.",
@@ -1152,7 +1164,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "gitea",
       "name": "Gitea",
       "description": "Self-hosted Git with issues, pull requests, and a first-run setup wizard.",
@@ -1175,7 +1187,11 @@
           "exposedPort": 3000,
           "exposed": true,
           "environment": {
-            "GITEA__server__ROOT_URL": "{{publicUrl:gitea}}"
+            "GITEA__server__ROOT_URL": "{{publicUrl:gitea}}/",
+            "GITEA__server__HTTP_PORT": "3000",
+            "GITEA__server__PROTOCOL": "http",
+            "GITEA__server__DISABLE_SSH": "true",
+            "GITEA__security__INSTALL_LOCK": "false"
           },
           "volumes": [
             "gitea_data:/data"
@@ -1185,7 +1201,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "code-server",
       "name": "code-server",
       "description": "Run VS Code in your browser, on your server. Login uses an auto-generated password.",
@@ -1230,7 +1246,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "uptime-kuma",
       "name": "Uptime Kuma",
       "description": "Self-hosted uptime monitoring with status pages and alerts.",
@@ -1260,7 +1276,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "vaultwarden",
       "name": "Vaultwarden",
       "description": "Lightweight self-hosted password manager (Bitwarden-compatible).",
@@ -1293,7 +1309,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "freshrss",
       "name": "FreshRSS",
       "description": "Self-hosted RSS and Atom feed reader with a first-run setup wizard.",
@@ -1323,7 +1339,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "stirling-pdf",
       "name": "Stirling PDF",
       "description": "Split, merge, convert, OCR and edit PDFs locally. Default login is admin / stirling — change it.",
@@ -1354,7 +1370,7 @@
       ]
     },
     {
-      "available": false,
+      "available": true,
       "id": "it-tools",
       "name": "IT-Tools",
       "description": "A handy collection of developer and sysadmin utilities. No login, no setup.",
