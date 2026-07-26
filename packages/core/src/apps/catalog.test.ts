@@ -26,6 +26,17 @@ describe("app catalog (JSON)", () => {
     expect(service?.volumes).toEqual(["code_server_home:/home/coder"]);
   });
 
+  it("surfaces the generated code-server password after install", () => {
+    const codeServer = APP_TEMPLATES.find((app) => app.id === "code-server");
+    expect(codeServer?.connection?.outputs).toContainEqual(
+      expect.objectContaining({
+        id: "password",
+        source: "env:code-server:PASSWORD",
+        secret: true,
+      }),
+    );
+  });
+
   it("rejects a malformed template (missing required fields)", () => {
     expect(isValidAppTemplate({ id: "x" })).toBe(false);
     expect(isValidAppTemplate(null)).toBe(false);

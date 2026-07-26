@@ -39,5 +39,30 @@
       "generate": "secret",
       "secret": true
     }
-  ]
+  ],
+  "connection": {
+    "title": "code-server login",
+    "description": "Open code-server and sign in with the generated password.",
+    "outputs": [
+      {
+        "id": "url",
+        "label": "URL",
+        "source": "publicUrl:code-server:8080",
+        "help": "Open this URL in your browser."
+      },
+      {
+        "id": "user",
+        "label": "Username",
+        "source": "template:coder",
+        "help": "code-server shows only a password prompt; this value is informational."
+      },
+      {
+        "id": "password",
+        "label": "Password",
+        "source": "env:code-server:PASSWORD",
+        "secret": true,
+        "help": "Reveal or copy this value, then paste it into the code-server login screen."
+      }
+    ]
+  }
 }
