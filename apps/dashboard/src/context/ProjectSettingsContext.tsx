@@ -56,7 +56,6 @@ interface BasicProjectData {
   [key: string]: any;
 }
 
-
 interface DomainsData {
   domains: any[];
   isLoading: boolean;
@@ -232,7 +231,6 @@ interface ProjectSettingsContextType {
 
 const ProjectSettingsContext = createContext<ProjectSettingsContextType | undefined>(undefined);
 
-
 interface ProviderProps {
   children: ReactNode;
   id: string;
@@ -403,9 +401,7 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
     const available = (projectData.domains || [])
       .map((d: any) => d?.domain)
       .filter((d: unknown): d is string => typeof d === "string" && d.length > 0);
-    setSelectedDomain((current) =>
-      current && available.includes(current) ? current : domain,
-    );
+    setSelectedDomain((current) => (current && available.includes(current) ? current : domain));
   }, [domain, projectData.domains]);
 
   // Derived: do we have multi-service rendering paths to enable?
@@ -502,15 +498,27 @@ export const ProjectSettingsProvider: React.FC<ProviderProps> = ({
           url: commit.url,
         }));
 
+        const fullName =
+          response.full_name ||
+          (response.owner && response.repo
+            ? `${response.owner}/${response.repo}`
+            : response.repo || response.git_url);
+        const provider = response.provider || "git";
+        const repoUrl =
+          response.html_url ||
+          response.git_url ||
+          (response.owner && response.repo
+            ? `https://github.com/${response.owner}/${response.repo}`
+            : "");
+
         setGitData({
           repository: {
-            name: `${response.owner}/${response.repo}`,
-            // `full_name` is the GitHub-canonical field the Source tab's
-            // auto-deploy switch gates on; without it that control was hidden
-            // for every git project.
-            full_name: `${response.owner}/${response.repo}`,
-            provider: "GitHub",
-            url: `https://github.com/${response.owner}/${response.repo}`,
+            name: fullName,
+            // Keep the GitHub-style shape so older Source-tab code and repo
+            // pickers can render generic Git URLs without a second model.
+            full_name: fullName,
+            provider,
+            url: repoUrl,
           },
           branch: response.branch || "main",
           recentCommits: mappedCommits,

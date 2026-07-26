@@ -134,8 +134,7 @@ export const projectsApi = {
   getLocal: () => api.get<{ success: boolean; projects: any[] }>(endpoints.projects.local),
 
   /** Scan a local directory for framework detection */
-  scan: (path: string) =>
-    api.post<ScanProjectResponse>(endpoints.projects.scan, { path }),
+  scan: (path: string) => api.post<ScanProjectResponse>(endpoints.projects.scan, { path }),
 
   /** Import a local folder as a project */
   importLocal: (data: {
@@ -289,11 +288,7 @@ export const projectsApi = {
    *   - token: string     → encrypt + store
    */
   updateCloneToken: (id: string | number, body: { token: string | null }) =>
-    api.patch<{ hasToken: boolean; setAt: string | null }>(
-      endpoints.projects.cloneToken(id),
-      body,
-    ),
-
+    api.patch<{ hasToken: boolean; setAt: string | null }>(endpoints.projects.cloneToken(id), body),
 
   /**
    * Update build + runtime options (any subset). Also the atomic config-save
@@ -333,7 +328,9 @@ export const projectsApi = {
   /** Retry the free .opsh.io edge-route sync (no rebuild). ok:false + warning
    *  when it still can't sync; clears the routing warning on success. */
   retryRouting: (id: string | number) =>
-    api.post<{ ok: boolean; warning?: string; error?: string }>(endpoints.projects.retryRouting(id)),
+    api.post<{ ok: boolean; warning?: string; error?: string }>(
+      endpoints.projects.retryRouting(id),
+    ),
 
   /** Clear CDN / proxy cache */
   clearCache: (id: string | number) => api.post<any>(endpoints.projects.clearCache(id)),
@@ -391,10 +388,17 @@ export const projectsApi = {
   /** Get git settings */
   getGit: (id: string | number) => api.get<any>(endpoints.projects.git(id)),
 
-  /** Link a GitHub repo to an existing project + register webhook */
+  /** Link a GitHub repo or generic Git URL to an existing project. */
   linkRepo: (
     id: string | number,
-    body: { owner: string; repo: string; branch?: string; installationId?: number },
+    body: {
+      owner?: string;
+      repo?: string;
+      gitUrl?: string;
+      gitProvider?: string;
+      branch?: string;
+      installationId?: number;
+    },
   ) => api.post<any>(endpoints.projects.gitLink(id), body),
 
   /** List branches */

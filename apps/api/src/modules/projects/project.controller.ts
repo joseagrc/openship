@@ -130,7 +130,6 @@ export async function ensure(c: Context) {
 
 // ─── Projects CRUD ───────────────────────────────────────────────────────────
 
-
 /**
  * Project ids a scoped token is allowed to SEE, or null when the caller is not
  * a scoped token (no filtering — normal role visibility applies). For an "own
@@ -159,14 +158,17 @@ export async function getHome(c: Context) {
   // visible projects (prevents the common confusion of "I deployed
   // something but it doesn't show up" when the session active org is
   // a freshly-created empty team org).
-  let result: { rows: Awaited<ReturnType<typeof projectService.listProjects>>["rows"]; total: number };
+  let result: {
+    rows: Awaited<ReturnType<typeof projectService.listProjects>>["rows"];
+    total: number;
+  };
   try {
     result = await projectService.listProjects(organizationId, {
       page: 1,
       // Scoped tokens own few projects but they may sit anywhere in the org's
       // set, so widen the fetch before filtering to the owned ids below.
       perPage: scopedIds ? 1000 : 100,
-      });
+    });
   } catch (err) {
     // Migrations not yet applied — PGlite first-boot case. Return an
     // explicit empty payload with no other-org hints (we can't query
@@ -190,7 +192,12 @@ export async function getHome(c: Context) {
     return c.json({
       success: true,
       projects: [],
-      numbers: { total_projects: 0, total_active_projects: 0, total_deployments: 0, total_success_deployments: 0 },
+      numbers: {
+        total_projects: 0,
+        total_active_projects: 0,
+        total_deployments: 0,
+        total_success_deployments: 0,
+      },
       otherOrgs: [],
     });
   }
@@ -209,16 +216,21 @@ export async function getHome(c: Context) {
   // reconnect" client-side from `deployTarget === 'cloud'` +
   // CloudContext.connected — no duplicate server-side flag.
   const projectIds = result.rows.map((p) => p.id);
-  const [enrichedProjectsResolved, latestByProject, primariesByProject, servicesByProject, deployStats] =
-    await Promise.all([
-      projectService.enrichProjectsBatch(result.rows),
-      repos.deployment.findLatestByProjects(projectIds),
-      repos.domain.getPrimariesByProjects(projectIds),
-      repos.service.listByProjects(projectIds),
-      // Real Activity-card counts (was hardcoded 0). Scoped to the visible
-      // project ids, so scoped tokens only see their own deployments.
-      repos.deployment.statsByProjects(projectIds),
-    ]);
+  const [
+    enrichedProjectsResolved,
+    latestByProject,
+    primariesByProject,
+    servicesByProject,
+    deployStats,
+  ] = await Promise.all([
+    projectService.enrichProjectsBatch(result.rows),
+    repos.deployment.findLatestByProjects(projectIds),
+    repos.domain.getPrimariesByProjects(projectIds),
+    repos.service.listByProjects(projectIds),
+    // Real Activity-card counts (was hardcoded 0). Scoped to the visible
+    // project ids, so scoped tokens only see their own deployments.
+    repos.deployment.statsByProjects(projectIds),
+  ]);
 
   const projects = enrichedProjectsResolved.map((enriched, idx) => {
     const original = result.rows[idx];
@@ -256,9 +268,7 @@ export async function getHome(c: Context) {
       // Batch lookup names + project counts. Names come from one
       // findManyById; counts still go through projectService per org
       // (each is a SELECT COUNT — fine at N < 20 memberships).
-      const orgs = await repos.organization
-        .findManyById(otherOrgIds)
-        .catch(() => []);
+      const orgs = await repos.organization.findManyById(otherOrgIds).catch(() => []);
       const orgsById = new Map(orgs.map((o) => [o.id, o]));
       otherOrgs = await Promise.all(
         otherOrgIds.map(async (otherOrgId) => {
@@ -399,7 +409,11 @@ export async function getById(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const project = await projectService.getProject(id, organizationId);
   refreshProjectFaviconIfStale(project);
   return c.json({ data: project });
@@ -411,7 +425,11 @@ export async function listEnvironments(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const data = await projectService.listProjectEnvironments(id, organizationId);
   return c.json({ success: true, data });
 }
@@ -420,7 +438,11 @@ export async function createEnvironment(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const body = await c.req.json<TCreateProjectEnvironmentBody>();
 
   if (!body.environmentName?.trim()) {
@@ -454,7 +476,11 @@ export async function updateEnvironment(c: Context) {
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
   const environmentId = param(c, "environmentId");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const body = await c.req.json();
 
   try {
@@ -483,7 +509,11 @@ export async function update(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const body = await c.req.json<TUpdateProjectBody>();
   const project = await projectService.updateProject(id, body, organizationId);
   audit.recordAsync(auditContextFrom(c, organizationId, userId), {
@@ -520,7 +550,11 @@ export async function remove(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "admin" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "admin",
+  });
 
   const force = c.req.query("force") === "true";
   // Orphan-and-drop even when a resource on a REACHABLE server won't destroy
@@ -731,7 +765,11 @@ export async function deletionPreview(c: Context) {
   const ctx = getRequestContext(c);
   const { organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const { repos } = await import("@repo/db");
   const project = await repos.project.findById(id);
   try {
@@ -749,7 +787,11 @@ export async function listEnvVars(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const environment = c.req.query("environment");
   const vars = await projectService.listEnvVars(id, organizationId, environment);
   return c.json({ data: vars });
@@ -759,7 +801,11 @@ export async function mergeEnvVars(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const body = await c.req.json<TMergeEnvVarsBody>();
   const result = await projectService.mergeEnvVars(id, organizationId, body);
   audit.recordAsync(auditContextFrom(c, organizationId, userId), {
@@ -781,7 +827,11 @@ export async function mergeEnvVars(c: Context) {
 
 export async function getResources(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   // org AFTER assert (cross-org rebind safety — see enable/disable).
   const { organizationId } = getRequestContext(c);
   const resources = await projectService.getResources(id, organizationId);
@@ -812,7 +862,11 @@ export async function outputCheck(c: Context) {
 
 export async function updateResources(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   // org AFTER assert (cross-org rebind safety — see enable/disable).
   const { userId, organizationId } = getRequestContext(c);
   const body = await c.req.json<TUpdateResourcesBody>();
@@ -842,7 +896,11 @@ export async function getCloneToken(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const project = await projectService.getProject(id, organizationId);
   return c.json({
     hasToken: !!project.cloneTokenEncrypted,
@@ -866,7 +924,11 @@ export async function updateCloneToken(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "admin" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "admin",
+  });
   const body = await c.req.json().catch(() => ({}));
   const rawToken = body?.token;
 
@@ -971,7 +1033,7 @@ export async function listLocal(c: Context) {
     const result = await projectService.listProjects(organizationId, {
       page: 1,
       perPage: scopedIds ? 1000 : 100,
-      });
+    });
     let localProjects = result.rows.filter((p) => p.gitProvider === "local");
     // Scoped-token isolation: only the projects this token may see.
     if (scopedIds) localProjects = localProjects.filter((p) => scopedIds.has(p.id));
@@ -990,7 +1052,11 @@ export async function runtimeLogs(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const tail = c.req.query("tail") ? Number(c.req.query("tail")) : undefined;
 
   try {
@@ -1009,7 +1075,11 @@ export async function runtimeLogStream(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const tail = c.req.query("tail") ? Number(c.req.query("tail")) : undefined;
 
   return streamSSE(c, async (sseStream) => {
@@ -1067,10 +1137,8 @@ function extractCloudStreamToken(result: unknown): { stream_url: string; token: 
   let node: unknown = result;
   for (let depth = 0; depth < 4 && node && typeof node === "object"; depth++) {
     const obj = node as Record<string, unknown>;
-    const streamUrl =
-      obj.stream_url ?? obj.streamUrl ?? obj.url ?? obj.sse_url ?? obj.endpoint;
-    const token =
-      obj.token ?? obj.stream_token ?? obj.streamToken ?? obj.access_token ?? obj.jwt;
+    const streamUrl = obj.stream_url ?? obj.streamUrl ?? obj.url ?? obj.sse_url ?? obj.endpoint;
+    const token = obj.token ?? obj.stream_token ?? obj.streamToken ?? obj.access_token ?? obj.jwt;
     if (typeof streamUrl === "string" && typeof token === "string") {
       return { stream_url: streamUrl, token };
     }
@@ -1106,7 +1174,11 @@ export async function serverLogStreamToken(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
 
   const project = await repos.project.findById(id);
   try {
@@ -1168,7 +1240,11 @@ export async function serverLogStream(c: Context) {
   const ctx = getRequestContext(c);
   const { organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
 
   const project = await repos.project.findById(id);
   try {
@@ -1234,7 +1310,11 @@ export async function recentServerLogs(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
 
   const project = await repos.project.findById(id);
   try {
@@ -1283,29 +1363,35 @@ export async function getGitInfo(c: Context) {
   const userId = ctx.userId;
   const organizationId = ctx.organizationId;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const info = await projectService.getGitInfo(id, organizationId);
 
   // No repo linked yet — the normal state for upload/local projects, not a
   // failure. The `code` lets the client render an inline "connect a repo" empty
   // state instead of a full-page repo-not-found takeover (see GitSettings).
-  if (!info.gitOwner || !info.gitRepo) {
+  if (!info.gitUrl && (!info.gitOwner || !info.gitRepo)) {
     return c.json({ success: false, error: "No repository connected", code: "NO_REPOSITORY" });
   }
 
-  const strategy = await resolveWebhookStrategy(info);
+  const provider = info.gitProvider ?? "github";
+  const githubRepo = isGitHubProvider(provider) && !!info.gitOwner && !!info.gitRepo;
+  const strategy = githubRepo ? await resolveWebhookStrategy(info) : "none";
 
   // Cloud projects (deployTarget=cloud) need the GitHub App installed - regardless
   // of whether this server is the SaaS or a local instance connected to cloud.
   const isCloudProject = info.deployTarget === "cloud";
   let installationInstalled = false;
-  if (isCloudProject && info.gitOwner) {
+  if (isCloudProject && githubRepo && info.gitOwner) {
     const instId = await getInstallationIdByOrg(organizationId, info.gitOwner);
     installationInstalled = !!instId;
   }
 
   let sharedWebhookId = info.webhookId ?? null;
-  if (!sharedWebhookId && info.gitOwner && info.gitRepo) {
+  if (!sharedWebhookId && githubRepo && info.gitOwner && info.gitRepo) {
     sharedWebhookId = await findSharedWebhookId(organizationId, info.gitOwner, info.gitRepo);
   }
 
@@ -1320,7 +1406,7 @@ export async function getGitInfo(c: Context) {
           : false;
 
   // Get available strategies for the UI
-  const strategies = await getAvailableStrategies(ctx, info);
+  const strategies = githubRepo ? await getAvailableStrategies(ctx, info) : { available: [] };
 
   // Get project domains for webhook domain picker
   const domains = await repos.domain.listByProject(id);
@@ -1329,19 +1415,28 @@ export async function getGitInfo(c: Context) {
     .map((d) => ({ hostname: d.hostname, ssl: d.sslStatus === "active" }));
 
   let branch = info.gitBranch ?? "";
-  if (!branch && isGitHubProvider(info.gitProvider) && info.gitOwner && info.gitRepo) {
+  if (!branch && githubRepo && info.gitOwner && info.gitRepo) {
     branch = await resolveDefaultBranch(ctx, info.gitOwner, info.gitRepo);
   }
-  const commits = branch && isGitHubProvider(info.gitProvider)
-    ? await getRecentCommits(ctx, info.gitOwner, info.gitRepo, branch, 10)
-    : [];
+  const commits =
+    branch && githubRepo && info.gitOwner && info.gitRepo
+      ? await getRecentCommits(ctx, info.gitOwner, info.gitRepo, branch, 10)
+      : [];
+  const repoUrl =
+    info.gitUrl ??
+    (info.gitOwner && info.gitRepo
+      ? `https://github.com/${info.gitOwner}/${info.gitRepo}`
+      : undefined);
 
   return c.json({
     success: true,
     owner: info.gitOwner,
     repo: info.gitRepo,
     branch,
-    provider: info.gitProvider ?? "github",
+    provider,
+    git_url: info.gitUrl,
+    html_url: repoUrl,
+    full_name: info.gitOwner && info.gitRepo ? `${info.gitOwner}/${info.gitRepo}` : info.gitRepo,
     commits: commits.map((c) => ({
       sha: c.sha,
       message: c.message,
@@ -1357,7 +1452,8 @@ export async function getGitInfo(c: Context) {
     available_strategies: strategies.available,
     verified_domains: verifiedDomains,
     installation_installed: installationInstalled,
-    install_url: isCloudProject && !installationInstalled ? getInstallUrl() : undefined,
+    install_url:
+      isCloudProject && githubRepo && !installationInstalled ? getInstallUrl() : undefined,
     default_rollback_strategy: info.defaultRollbackStrategy ?? "git",
   });
 }
@@ -1366,7 +1462,11 @@ export async function listBranches(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const info = await projectService.getGitInfo(id, organizationId);
 
   if (!isGitHubProvider(info.gitProvider) || !info.gitOwner || !info.gitRepo) {
@@ -1385,22 +1485,31 @@ export async function listBranches(c: Context) {
 }
 
 /**
- * POST /projects/:id/git/link  { owner, repo, branch? }
+ * POST /projects/:id/git/link  { owner, repo, branch? } or { gitUrl, gitProvider?, branch? }
  *
- * Links a GitHub repo to an existing project and registers a deploy webhook.
+ * Links a GitHub repo or generic Git URL to an existing project.
  */
 export async function linkRepo(c: Context) {
   const ctx = getRequestContext(c);
   const id = param(c, "id");
   await permission.assert(ctx, { resourceType: "project", resourceId: id, action: "write" });
-  const { owner, repo, branch, installationId } = await c.req.json<{
-    owner: string;
-    repo: string;
+  const { owner, repo, gitUrl, gitProvider, branch, installationId } = await c.req.json<{
+    owner?: string;
+    repo?: string;
+    gitUrl?: string;
+    gitProvider?: string;
     branch?: string;
     installationId?: number;
   }>();
 
-  const result = await projectService.linkProjectRepo(ctx, id, { owner, repo, branch, installationId });
+  const result = await projectService.linkProjectRepo(ctx, id, {
+    owner,
+    repo,
+    gitUrl,
+    gitProvider,
+    branch,
+    installationId,
+  });
 
   if (!result.ok) {
     if (result.code === "not_found") return c.json({ error: "Project not found" }, 404);
@@ -1427,6 +1536,8 @@ export async function linkRepo(c: Context) {
       gitOwner: result.owner,
       gitRepo: result.repo,
       gitBranch: result.branch,
+      gitProvider: result.provider,
+      gitUrl: result.gitUrl,
       webhookStrategy: result.strategy,
       autoDeploy: result.autoDeploy,
     },
@@ -1437,6 +1548,10 @@ export async function linkRepo(c: Context) {
     owner: result.owner,
     repo: result.repo,
     branch: result.branch,
+    provider: result.provider,
+    git_url: result.gitUrl,
+    html_url: result.htmlUrl,
+    full_name: result.fullName,
     webhook_strategy: result.strategy,
     auto_deploy: result.autoDeploy,
   });
@@ -1466,7 +1581,11 @@ export async function setAutoDeploy(c: Context) {
   const userId = ctx.userId;
   const organizationId = ctx.organizationId;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const { enabled } = await c.req.json<{ enabled: boolean }>();
   const project = await repos.project.findById(id);
   try {
@@ -1505,7 +1624,7 @@ export async function setAutoDeploy(c: Context) {
       // User has a verified domain - direct webhook delivery
       if (enabled) {
         // strategy === "domain" ⟹ webhookDomain is set (resolveWebhookStrategy).
-    const webhookUrl = domainWebhookUrl(project.webhookDomain!);
+        const webhookUrl = domainWebhookUrl(project.webhookDomain!);
         const webhookId = await ensureSharedWebhook(ctx, project, owner, repo, webhookUrl);
         if (!webhookId) {
           return c.json(
@@ -1519,7 +1638,13 @@ export async function setAutoDeploy(c: Context) {
         await repos.project.update(id, { autoDeploy: true });
       } else {
         await repos.project.update(id, { autoDeploy: false });
-        await disableSharedWebhookIfUnused(ctx, project.organizationId, owner, repo, project.webhookId);
+        await disableSharedWebhookIfUnused(
+          ctx,
+          project.organizationId,
+          owner,
+          repo,
+          project.webhookId,
+        );
       }
     } else if (enabled) {
       // "repo" strategy - manage repo-level webhooks
@@ -1537,7 +1662,13 @@ export async function setAutoDeploy(c: Context) {
     } else {
       // Disable this environment. Keep the repo webhook while sibling environments still use it.
       await repos.project.update(id, { autoDeploy: false });
-      await disableSharedWebhookIfUnused(ctx, project.organizationId, owner, repo, project.webhookId);
+      await disableSharedWebhookIfUnused(
+        ctx,
+        project.organizationId,
+        owner,
+        repo,
+        project.webhookId,
+      );
     }
   } catch (err) {
     const msg = safeErrorMessage(err);
@@ -1615,7 +1746,11 @@ export async function setWebhookDomain(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const { domain: hostname } = await c.req.json<{ domain: string | null }>();
 
   const project = await repos.project.findById(id);
@@ -1752,7 +1887,11 @@ export async function setBranch(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const { branch } = await c.req.json<{ branch: string }>();
   if (!branch) return c.json({ error: "branch is required" }, 400);
   const result = await projectService.setBranch(id, branch, ctx);
@@ -1771,7 +1910,11 @@ export async function setOptions(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const body = await c.req.json<Record<string, unknown>>();
   const result = await projectService.updateOptions(id, body, organizationId);
   audit.recordAsync(auditContextFrom(c, organizationId, userId), {
@@ -1799,7 +1942,11 @@ export async function getCommitStatus(c: Context) {
 
 export async function setSleepMode(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   // Read AFTER assert: permission.assert rebinds ctx.organizationId to the
   // resource's org for cross-org access (admin/grant). Capturing it before
   // would pass the stale session-active org → wrong-org 404 for multi-org
@@ -1821,7 +1968,11 @@ export async function setSleepMode(c: Context) {
 
 export async function enable(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   // Read org AFTER assert — it rebinds ctx to the resource's org for
   // cross-org access; the pre-assert value would be the stale active org.
   const { userId, organizationId } = getRequestContext(c);
@@ -1842,7 +1993,11 @@ export async function enable(c: Context) {
 
 export async function disable(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   // Read org AFTER assert — it rebinds ctx to the resource's org for
   // cross-org access; the pre-assert value would be the stale active org.
   const { userId, organizationId } = getRequestContext(c);
@@ -1866,7 +2021,11 @@ export async function disable(c: Context) {
  *  (200, ok:false) when it still can't sync so the UI re-surfaces guidance. */
 export async function retryRouting(c: Context) {
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
   const { userId, organizationId } = getRequestContext(c);
   try {
     const result = await projectService.retryProjectRouting(id, organizationId);
@@ -1891,7 +2050,11 @@ export async function listDeployments(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const page = Number(c.req.query("page") ?? 1);
   const perPage = Number(c.req.query("perPage") ?? 20);
   const environment = c.req.query("environment") ?? undefined;
@@ -1914,7 +2077,11 @@ export async function deploymentSession(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const result = await projectService.getLatestDeploymentSession(id, organizationId);
   return c.json(result);
 }
@@ -1925,7 +2092,11 @@ export async function getInfo(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "read" });
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "read",
+  });
   const project = await projectService.getProject(id, organizationId);
   const environments = await projectService.listProjectEnvironments(id, organizationId);
   const hasServer = project.hasServer ?? project.productionMode === "host";
@@ -2007,8 +2178,16 @@ export async function connectDomain(c: Context) {
   const ctx = getRequestContext(c);
   const { userId, organizationId } = ctx;
   const id = param(c, "id");
-  await permission.assert(getRequestContext(c), { resourceType: "project", resourceId: id, action: "write" });
-  const body = await c.req.json<{ domain: string; includeWww?: boolean; externalIngress?: boolean }>();
+  await permission.assert(getRequestContext(c), {
+    resourceType: "project",
+    resourceId: id,
+    action: "write",
+  });
+  const body = await c.req.json<{
+    domain: string;
+    includeWww?: boolean;
+    externalIngress?: boolean;
+  }>();
 
   if (!body.domain?.trim()) {
     return c.json({ success: false, error: "Domain is required" }, 400);
