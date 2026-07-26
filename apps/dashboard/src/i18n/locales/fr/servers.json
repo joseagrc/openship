@@ -61,7 +61,12 @@
     "projects": "Projets",
     "regions": "Régions",
     "thisServer": "Ce serveur",
-    "currentHost": "Hôte actuel"
+    "currentHost": "Hôte actuel",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "Connexion SSH",
@@ -152,7 +157,11 @@
     "toastRemovalTimedOut": "Délai de suppression dépassé — revérifiez l'état du serveur",
     "toastFailedRemove": "Échec de la suppression de {label}",
     "toastServerRemoved": "Serveur supprimé",
-    "toastFailedRemoveServer": "Échec de la suppression du serveur"
+    "toastFailedRemoveServer": "Échec de la suppression du serveur",
+    "sshPort": "SSH · {port}",
+    "port": "Port",
+    "toastComponentRepaired": "{label} repaired",
+    "toastFailedRepair": "Failed to repair {label}"
   },
   "banner": {
     "unreachableTitle": "Impossible de joindre {host}",
@@ -219,7 +228,17 @@
     "statusInstalled": "Installé",
     "statusRemoved": "Supprimé",
     "statusFailed": "Échec",
-    "statusWaiting": "En attente"
+    "statusWaiting": "En attente",
+    "repair": "Repair",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer",
+    "repairing": "Repairing…",
+    "repairComplete": "Repair Complete",
+    "repairFinishedErrors": "Repair Finished with Errors",
+    "repairLogs": "Repair Logs"
   },
   "ports": {
     "title": "Redirection de ports",

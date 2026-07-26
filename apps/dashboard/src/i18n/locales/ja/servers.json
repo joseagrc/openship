@@ -61,7 +61,12 @@
     "projects": "プロジェクト",
     "regions": "リージョン",
     "thisServer": "このサーバー",
-    "currentHost": "現在のホスト"
+    "currentHost": "現在のホスト",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "SSH 接続",
@@ -152,7 +157,11 @@
     "toastRemovalTimedOut": "削除がタイムアウトしました。サーバーのステータスを再確認してください",
     "toastFailedRemove": "{label} の削除に失敗しました",
     "toastServerRemoved": "サーバーを削除しました",
-    "toastFailedRemoveServer": "サーバーの削除に失敗しました"
+    "toastFailedRemoveServer": "サーバーの削除に失敗しました",
+    "sshPort": "SSH · {port}",
+    "port": "Port",
+    "toastComponentRepaired": "{label} repaired",
+    "toastFailedRepair": "Failed to repair {label}"
   },
   "banner": {
     "unreachableTitle": "{host} に到達できません",
@@ -219,7 +228,17 @@
     "statusInstalled": "インストール済み",
     "statusRemoved": "削除済み",
     "statusFailed": "失敗",
-    "statusWaiting": "待機中"
+    "statusWaiting": "待機中",
+    "repair": "Repair",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer",
+    "repairing": "Repairing…",
+    "repairComplete": "Repair Complete",
+    "repairFinishedErrors": "Repair Finished with Errors",
+    "repairLogs": "Repair Logs"
   },
   "ports": {
     "title": "ポート転送",

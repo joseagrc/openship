@@ -61,7 +61,12 @@
     "projects": "项目",
     "regions": "区域",
     "thisServer": "此服务器",
-    "currentHost": "当前主机"
+    "currentHost": "当前主机",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "SSH 连接",
@@ -152,7 +157,11 @@
     "toastRemovalTimedOut": "移除超时——请重新检查服务器状态",
     "toastFailedRemove": "移除 {label} 失败",
     "toastServerRemoved": "服务器已移除",
-    "toastFailedRemoveServer": "移除服务器失败"
+    "toastFailedRemoveServer": "移除服务器失败",
+    "sshPort": "SSH · {port}",
+    "port": "Port",
+    "toastComponentRepaired": "{label} repaired",
+    "toastFailedRepair": "Failed to repair {label}"
   },
   "banner": {
     "unreachableTitle": "无法连接到 {host}",
@@ -219,7 +228,17 @@
     "statusInstalled": "已安装",
     "statusRemoved": "已移除",
     "statusFailed": "失败",
-    "statusWaiting": "等待中"
+    "statusWaiting": "等待中",
+    "repair": "Repair",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer",
+    "repairing": "Repairing…",
+    "repairComplete": "Repair Complete",
+    "repairFinishedErrors": "Repair Finished with Errors",
+    "repairLogs": "Repair Logs"
   },
   "ports": {
     "title": "端口转发",

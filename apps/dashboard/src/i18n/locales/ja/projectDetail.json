@@ -132,7 +132,10 @@
         "mail": "メール & SMTP",
         "runtime": "ランタイム",
         "other": "その他"
-      }
+      },
+      "cloudConnectTitle": "Connect Openship Cloud",
+      "cloudConnectBody": "Link this instance to Openship Cloud to browse and add managed cloud images. You can still add any image manually from Local images.",
+      "cloudConnectButton": "Connect to Openship Cloud"
     },
     "detail": {
       "tabs": {
@@ -204,8 +207,15 @@
         "updateFailed": "サービスの更新に失敗しました",
         "serviceDeleted": "サービスを削除しました",
         "deleteFailed": "サービスの削除に失敗しました",
-        "backupRunFailed": "バックアップの実行に失敗しました"
-      }
+        "backupRunFailed": "バックアップの実行に失敗しました",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
+      },
+      "internalAddress": "Internal address",
+      "internalAddressHint": "Other services reach this one at this address.",
+      "currentIp": "Current IP",
+      "currentIpHint": "Changes on restart — use the internal address above instead.",
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "名前",
@@ -236,8 +246,13 @@
         "buildContextOrDockerfile": "ビルドコンテキストまたは Dockerfile のパスを追加してください。",
         "rootDirectory": "ルートディレクトリを追加してください（例: apps/web）。",
         "buildOrStart": "ビルドコマンドまたは起動コマンドを少なくとも 1 つ追加してください。",
-        "saveFailed": "サービスの保存に失敗しました。"
-      }
+        "saveFailed": "サービスの保存に失敗しました。",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

@@ -132,7 +132,10 @@
         "mail": "البريد وSMTP",
         "runtime": "أوقات التشغيل",
         "other": "أخرى"
-      }
+      },
+      "cloudConnectTitle": "Connect Openship Cloud",
+      "cloudConnectBody": "Link this instance to Openship Cloud to browse and add managed cloud images. You can still add any image manually from Local images.",
+      "cloudConnectButton": "Connect to Openship Cloud"
     },
     "detail": {
       "tabs": {
@@ -204,8 +207,15 @@
         "updateFailed": "تعذّر تحديث الخدمة",
         "serviceDeleted": "تم حذف الخدمة",
         "deleteFailed": "تعذّر حذف الخدمة",
-        "backupRunFailed": "فشلت عملية النسخ الاحتياطي"
-      }
+        "backupRunFailed": "فشلت عملية النسخ الاحتياطي",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
+      },
+      "internalAddress": "Internal address",
+      "internalAddressHint": "Other services reach this one at this address.",
+      "currentIp": "Current IP",
+      "currentIpHint": "Changes on restart — use the internal address above instead.",
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "الاسم",
@@ -236,8 +246,13 @@
         "buildContextOrDockerfile": "أضِف سياق بناء أو مسار Dockerfile.",
         "rootDirectory": "أضِف مجلدًا جذرًا (مثل apps/web).",
         "buildOrStart": "أضِف على الأقل أمر بناء أو أمر بدء.",
-        "saveFailed": "تعذّر حفظ الخدمة."
-      }
+        "saveFailed": "تعذّر حفظ الخدمة.",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

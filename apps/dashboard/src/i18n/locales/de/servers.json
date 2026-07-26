@@ -61,7 +61,12 @@
     "projects": "Projekte",
     "regions": "Regionen",
     "thisServer": "Dieser Server",
-    "currentHost": "Aktueller Host"
+    "currentHost": "Aktueller Host",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "SSH-Verbindung",
@@ -152,7 +157,11 @@
     "toastRemovalTimedOut": "Zeitüberschreitung beim Entfernen – Serverstatus erneut prüfen",
     "toastFailedRemove": "{label} konnte nicht entfernt werden",
     "toastServerRemoved": "Server entfernt",
-    "toastFailedRemoveServer": "Server konnte nicht entfernt werden"
+    "toastFailedRemoveServer": "Server konnte nicht entfernt werden",
+    "sshPort": "SSH · {port}",
+    "port": "Port",
+    "toastComponentRepaired": "{label} repaired",
+    "toastFailedRepair": "Failed to repair {label}"
   },
   "banner": {
     "unreachableTitle": "{host} nicht erreichbar",
@@ -219,7 +228,17 @@
     "statusInstalled": "Installiert",
     "statusRemoved": "Entfernt",
     "statusFailed": "Fehlgeschlagen",
-    "statusWaiting": "Wartet"
+    "statusWaiting": "Wartet",
+    "repair": "Repair",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer",
+    "repairing": "Repairing…",
+    "repairComplete": "Repair Complete",
+    "repairFinishedErrors": "Repair Finished with Errors",
+    "repairLogs": "Repair Logs"
   },
   "ports": {
     "title": "Port-Weiterleitung",

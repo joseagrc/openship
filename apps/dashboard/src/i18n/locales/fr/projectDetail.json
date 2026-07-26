@@ -207,12 +207,15 @@
         "updateFailed": "Échec de la mise à jour du service",
         "serviceDeleted": "Service supprimé",
         "deleteFailed": "Échec de la suppression du service",
-        "backupRunFailed": "Échec de l'exécution de la sauvegarde"
+        "backupRunFailed": "Échec de l'exécution de la sauvegarde",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
       },
       "internalAddress": "Adresse interne",
       "internalAddressHint": "Les autres services atteignent celui-ci à cette adresse.",
       "currentIp": "IP actuelle",
-      "currentIpHint": "Change au redémarrage — utilisez plutôt l'adresse interne ci-dessus."
+      "currentIpHint": "Change au redémarrage — utilisez plutôt l'adresse interne ci-dessus.",
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "Nom",
@@ -243,8 +246,13 @@
         "buildContextOrDockerfile": "Ajoutez un contexte de build ou un chemin de Dockerfile.",
         "rootDirectory": "Ajoutez un répertoire racine (par ex. apps/web).",
         "buildOrStart": "Ajoutez au moins une commande de build ou une commande de démarrage.",
-        "saveFailed": "Échec de l'enregistrement du service."
-      }
+        "saveFailed": "Échec de l'enregistrement du service.",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

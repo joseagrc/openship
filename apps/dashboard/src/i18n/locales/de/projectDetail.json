@@ -132,7 +132,10 @@
         "mail": "Mail & SMTP",
         "runtime": "Laufzeitumgebungen",
         "other": "Sonstiges"
-      }
+      },
+      "cloudConnectTitle": "Connect Openship Cloud",
+      "cloudConnectBody": "Link this instance to Openship Cloud to browse and add managed cloud images. You can still add any image manually from Local images.",
+      "cloudConnectButton": "Connect to Openship Cloud"
     },
     "detail": {
       "tabs": {
@@ -204,8 +207,15 @@
         "updateFailed": "Dienst konnte nicht aktualisiert werden",
         "serviceDeleted": "Dienst gelöscht",
         "deleteFailed": "Dienst konnte nicht gelöscht werden",
-        "backupRunFailed": "Backup-Ausführung fehlgeschlagen"
-      }
+        "backupRunFailed": "Backup-Ausführung fehlgeschlagen",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
+      },
+      "internalAddress": "Internal address",
+      "internalAddressHint": "Other services reach this one at this address.",
+      "currentIp": "Current IP",
+      "currentIpHint": "Changes on restart — use the internal address above instead.",
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "Name",
@@ -236,8 +246,13 @@
         "buildContextOrDockerfile": "Fügen Sie einen Build-Kontext oder Dockerfile-Pfad hinzu.",
         "rootDirectory": "Fügen Sie ein Stammverzeichnis hinzu (z. B. apps/web).",
         "buildOrStart": "Fügen Sie mindestens einen Build-Befehl oder einen Startbefehl hinzu.",
-        "saveFailed": "Dienst konnte nicht gespeichert werden."
-      }
+        "saveFailed": "Dienst konnte nicht gespeichert werden.",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

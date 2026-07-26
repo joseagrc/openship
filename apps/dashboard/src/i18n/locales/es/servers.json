@@ -61,7 +61,12 @@
     "projects": "Proyectos",
     "regions": "Regiones",
     "thisServer": "Este servidor",
-    "currentHost": "Host actual"
+    "currentHost": "Host actual",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "Conexión SSH",
@@ -154,7 +159,9 @@
     "toastFailedRemove": "No se pudo eliminar {label}",
     "toastFailedRepair": "No se pudo reparar {label}",
     "toastServerRemoved": "Servidor eliminado",
-    "toastFailedRemoveServer": "No se pudo eliminar el servidor"
+    "toastFailedRemoveServer": "No se pudo eliminar el servidor",
+    "sshPort": "SSH · {port}",
+    "port": "Port"
   },
   "banner": {
     "unreachableTitle": "No se puede conectar con {host}",
@@ -226,7 +233,12 @@
     "statusInstalled": "Instalado",
     "statusRemoved": "Eliminado",
     "statusFailed": "Fallido",
-    "statusWaiting": "En espera"
+    "statusWaiting": "En espera",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer"
   },
   "ports": {
     "title": "Reenvío de puertos",

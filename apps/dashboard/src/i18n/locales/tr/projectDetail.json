@@ -211,8 +211,11 @@
         "updateFailed": "Servis güncellenemedi",
         "serviceDeleted": "Servis silindi",
         "deleteFailed": "Servis silinemedi",
-        "backupRunFailed": "Yedekleme işlemi başarısız oldu"
-      }
+        "backupRunFailed": "Yedekleme işlemi başarısız oldu",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
+      },
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "Ad",
@@ -243,8 +246,13 @@
         "buildContextOrDockerfile": "Bir derleme bağlamı veya Dockerfile yolu ekleyin.",
         "rootDirectory": "Bir kök dizin ekleyin (örn. apps/web).",
         "buildOrStart": "En azından bir derleme komutu veya bir başlatma komutu ekleyin.",
-        "saveFailed": "Servis kaydedilemedi."
-      }
+        "saveFailed": "Servis kaydedilemedi.",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

@@ -132,7 +132,10 @@
         "mail": "邮件与 SMTP",
         "runtime": "运行时",
         "other": "其他"
-      }
+      },
+      "cloudConnectTitle": "Connect Openship Cloud",
+      "cloudConnectBody": "Link this instance to Openship Cloud to browse and add managed cloud images. You can still add any image manually from Local images.",
+      "cloudConnectButton": "Connect to Openship Cloud"
     },
     "detail": {
       "tabs": {
@@ -204,8 +207,15 @@
         "updateFailed": "更新服务失败",
         "serviceDeleted": "服务已删除",
         "deleteFailed": "删除服务失败",
-        "backupRunFailed": "备份运行失败"
-      }
+        "backupRunFailed": "备份运行失败",
+        "imageUpgraded": "Image upgraded",
+        "imageUpgradeFailed": "Failed to upgrade image"
+      },
+      "internalAddress": "Internal address",
+      "internalAddressHint": "Other services reach this one at this address.",
+      "currentIp": "Current IP",
+      "currentIpHint": "Changes on restart — use the internal address above instead.",
+      "upgradingImage": "Upgrading image…"
     },
     "settingsForm": {
       "name": "名称",
@@ -236,8 +246,13 @@
         "buildContextOrDockerfile": "请添加构建上下文或 Dockerfile 路径。",
         "rootDirectory": "请添加根目录（例如 apps/web）。",
         "buildOrStart": "请至少添加一个构建命令或启动命令。",
-        "saveFailed": "保存服务失败。"
-      }
+        "saveFailed": "保存服务失败。",
+        "replicas": "Replicas must be a whole number from 1 to 10.",
+        "replicasNeedStateless": "Replicas above 1 require a stateless service with no volumes.",
+        "replicasNeedUnpublishedPorts": "Replicas above 1 require internal ports, not fixed host mappings."
+      },
+      "replicas": "Replicas",
+      "replicasHint": "More than 1 replica uses internal ports; host:container mappings are saved as the internal port."
     }
   }
 }

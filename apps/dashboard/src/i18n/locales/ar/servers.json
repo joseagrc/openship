@@ -61,7 +61,12 @@
     "projects": "المشاريع",
     "regions": "المناطق",
     "thisServer": "هذا الخادم",
-    "currentHost": "المضيف الحالي"
+    "currentHost": "المضيف الحالي",
+    "featContainer": "Container runtime",
+    "featContainerDesc": "Runs each app in isolation",
+    "featProxy": "Reverse proxy",
+    "featProxyDesc": "Routing & SSL",
+    "seeDocs": "See docs"
   },
   "form": {
     "sshConnection": "اتصال SSH",
@@ -152,7 +157,11 @@
     "toastRemovalTimedOut": "انتهت مهلة الإزالة - أعد فحص حالة الخادم",
     "toastFailedRemove": "فشل إزالة {label}",
     "toastServerRemoved": "تمت إزالة الخادم",
-    "toastFailedRemoveServer": "فشل إزالة الخادم"
+    "toastFailedRemoveServer": "فشل إزالة الخادم",
+    "sshPort": "SSH · {port}",
+    "port": "Port",
+    "toastComponentRepaired": "{label} repaired",
+    "toastFailedRepair": "Failed to repair {label}"
   },
   "banner": {
     "unreachableTitle": "تعذّر الوصول إلى {host}",
@@ -219,7 +228,17 @@
     "statusInstalled": "مثبّت",
     "statusRemoved": "تمت الإزالة",
     "statusFailed": "فشل",
-    "statusWaiting": "في الانتظار"
+    "statusWaiting": "في الانتظار",
+    "repair": "Repair",
+    "roleDocker": "Container runtime",
+    "roleGit": "Version control",
+    "roleOpenresty": "Reverse proxy",
+    "roleCertbot": "SSL certificates",
+    "roleRsync": "File transfer",
+    "repairing": "Repairing…",
+    "repairComplete": "Repair Complete",
+    "repairFinishedErrors": "Repair Finished with Errors",
+    "repairLogs": "Repair Logs"
   },
   "ports": {
     "title": "إعادة توجيه المنافذ",
