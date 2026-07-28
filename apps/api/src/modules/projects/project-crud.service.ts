@@ -14,7 +14,7 @@ import {
   compareSemver,
   isReleaseProvider,
   isBehind,
-  GITHUB_REPO,
+  updateSourceConfig,
   normalizeEnvironment,
   isGitHubProvider,
   parseGitRepositoryUrl,
@@ -27,6 +27,7 @@ import { normalizeRollbackWindow } from "../../lib/release-retention";
 import {
   resolveLatestVersion,
   resolveLatestReleaseTag,
+  resolveLatestUpdateSourceReleaseTag,
   readApiVersion,
 } from "../../lib/release-resolver";
 import { resolveLatestImageDigest } from "../../lib/image-registry";
@@ -1549,8 +1550,25 @@ async function getReleaseDriftStatus(p: Project) {
  */
 async function getSelfReleaseDrift(p: Project) {
   const current = readApiVersion();
-  const latest = await resolveLatestReleaseTag(GITHUB_REPO).catch(() => null);
-  const behind = Boolean(latest && current && compareSemver(latest, current) > 0);
+  const settings = await repos.instanceSettings.get().catch(() => undefined);
+  const source = updateSourceConfig({
+    repo: settings?.updateRepo || env.OPENSHIP_UPDATE_REPO,
+    branch: settings?.updateBranch || env.OPENSHIP_UPDATE_BRANCH,
+    channel: settings?.updateChannel || env.OPENSHIP_UPDATE_CHANNEL,
+    imageRegistry: settings?.updateImageRegistry || env.OPENSHIP_IMAGE_REGISTRY,
+    version: settings?.updateVersion || env.OPENSHIP_VERSION || readApiVersion(),
+  });
+  const configuredDockerTag = source.channel === "docker" ? source.version : null;
+  const latest =
+    configuredDockerTag || (await resolveLatestUpdateSourceReleaseTag(source).catch(() => null));
+  const configuredTagIsSemver = Boolean(configuredDockerTag?.match(/^v?\d+\.\d+\.\d+/));
+  const behind = Boolean(
+    latest &&
+      current &&
+      (configuredDockerTag && !configuredTagIsSemver
+        ? configuredDockerTag !== current
+        : compareSemver(latest, current) > 0),
+  );
   const latestInProgress =
     behind && latest
       ? Boolean(
@@ -1567,6 +1585,13 @@ async function getSelfReleaseDrift(p: Project) {
     latestVersion: latest,
     currentVersion: current,
     pinned: false,
+    source: {
+      provider: source.provider,
+      repo: source.repo,
+      repoUrl: source.repoUrl,
+      imageRegistry: source.imageRegistry,
+      channel: source.channel,
+    },
   };
 }
 

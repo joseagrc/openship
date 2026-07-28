@@ -35,7 +35,16 @@ export const updatesApi = {
 
   /** Apply the available update to a project/app (force-pull + redeploy). */
   apply: (projectId: string) =>
-    api.post<{ data: { success: boolean; deployment_id: string; project_id: string } }>(
+    api.post<{
+      data: {
+        success: boolean;
+        deployment_id: string | null;
+        project_id: string;
+        self_update?: boolean;
+        logPath?: string;
+        composeDir?: string;
+      };
+    }>(
       endpoints.updates.apply(projectId),
     ),
 };

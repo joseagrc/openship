@@ -19,7 +19,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { GithubReleasePayload, ReleaseSource } from "@repo/core";
+import type { GithubReleasePayload, ReleaseSource, UpdateSourceConfig } from "@repo/core";
 import { renderAssetName } from "@repo/core";
 import { assertPublicHttps, fetchAndExtractRelease } from "./release-download";
 
@@ -187,11 +187,48 @@ export async function fetchLatestRelease(repo: string): Promise<GithubReleasePay
   }
 }
 
+/** Fetch a latest release payload from any configured update-source provider. */
+export async function fetchLatestUpdateSourceRelease(
+  source: Pick<UpdateSourceConfig, "releasesApiUrl">,
+): Promise<GithubReleasePayload | null> {
+  if (!source.releasesApiUrl) return null;
+  try {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), 10_000);
+    const res = await fetch(source.releasesApiUrl, {
+      headers: { Accept: "application/json", "User-Agent": "openship" },
+      signal: ctl.signal,
+    }).finally(() => clearTimeout(timer));
+    if (!res.ok) return null;
+    return (await res.json()) as GithubReleasePayload;
+  } catch {
+    return null;
+  }
+}
+
 /** Latest release tag (leading "v" stripped), or null. */
 export async function resolveLatestReleaseTag(repo: string): Promise<string | null> {
   const release = await fetchLatestRelease(repo);
   const tag = release?.tag_name?.trim();
   return tag ? tag.replace(/^v/, "") : null;
+}
+
+/** Latest release tag from a configured VCS update source, or null. */
+export async function resolveLatestUpdateSourceReleaseTag(
+  source: Pick<UpdateSourceConfig, "releasesApiUrl">,
+): Promise<string | null> {
+  const release = await fetchLatestUpdateSourceRelease(source);
+  const payload = release as GithubReleasePayload & { tagName?: unknown; name?: unknown };
+  const tag =
+    typeof payload?.tag_name === "string"
+      ? payload.tag_name
+      : typeof payload?.tagName === "string"
+        ? payload.tagName
+        : typeof payload?.name === "string"
+          ? payload.name
+          : "";
+  const trimmed = tag.trim();
+  return trimmed ? trimmed.replace(/^v/, "") : null;
 }
 
 /**

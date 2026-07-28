@@ -19,6 +19,7 @@ import type { RequestContext } from "../../lib/request-context";
 import { assertResourceInOrg } from "../../lib/controller-helpers";
 import { getProjectCommitStatus } from "../projects/project-crud.service";
 import { redeployBuildSession } from "../deployments/build.service";
+import { applySelfUpdate } from "./self-update.service";
 
 /** The union `getProjectCommitStatus` returns (widened for normalization). */
 type DriftStatus = Awaited<ReturnType<typeof getProjectCommitStatus>>;
@@ -135,6 +136,14 @@ async function scanProjects(ctx: RequestContext | null, rows: Project[]): Promis
 export async function applyProjectUpdate(ctx: RequestContext, projectId: string) {
   const project = await repos.project.findById(projectId);
   assertResourceInOrg(project, "Project", ctx.organizationId, projectId);
+  if (project.appTemplateId === "openship") {
+    const cached = await repos.updateStatus.getByProject(projectId).catch(() => undefined);
+    const latestVersion =
+      typeof cached?.latestLabel === "string" && cached.latestLabel.trim()
+        ? cached.latestLabel
+        : null;
+    return applySelfUpdate(ctx, project, { latestVersion });
+  }
   if (!project.activeDeploymentId) {
     throw new ValidationError("Deploy this project before updating it.");
   }
