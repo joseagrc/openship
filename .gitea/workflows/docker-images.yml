@@ -104,6 +104,8 @@ jobs:
           platforms: ${{ steps.platforms.outputs.value }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          provenance: false
+          sbom: false
 
       - name: Inspect published image
         run: docker buildx imagetools inspect "${{ steps.tags.outputs.inspect_tag }}" || true
