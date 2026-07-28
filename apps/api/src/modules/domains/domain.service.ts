@@ -972,6 +972,52 @@ export interface ManualRouteRepairResult {
   }>;
 }
 
+async function repairProjectsLiveDomainRoutes(projects: Project[]): Promise<ManualRouteRepairResult> {
+  const result: ManualRouteRepairResult = {
+    routedProjects: 0,
+    failed: 0,
+    total: projects.length,
+    details: [],
+  };
+
+  for (const project of projects) {
+    if (!project.activeDeploymentId) {
+      result.details.push({
+        projectId: project.id,
+        slug: project.slug,
+        status: "skipped",
+        error: "project has no active deployment",
+      });
+      continue;
+    }
+
+    try {
+      const routed = await reapplyProjectAndServiceRoutes(project);
+      if (routed) {
+        result.routedProjects++;
+        result.details.push({ projectId: project.id, slug: project.slug, status: "repaired" });
+      } else {
+        result.details.push({
+          projectId: project.id,
+          slug: project.slug,
+          status: "skipped",
+          error: "no live routes were re-applied",
+        });
+      }
+    } catch (err) {
+      result.failed++;
+      result.details.push({
+        projectId: project.id,
+        slug: project.slug,
+        status: "failed",
+        error: safeErrorMessage(err),
+      });
+    }
+  }
+
+  return result;
+}
+
 async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean> {
   if (!project.activeDeploymentId) return false;
 
@@ -994,6 +1040,41 @@ async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean
   for (const service of services) {
     if (!service.enabled || !service.exposed) continue;
     const row = serviceRowById.get(service.id);
+    let liveIp = row?.ip ?? undefined;
+    let liveHostPort = row?.hostPort ?? undefined;
+
+    if (row?.containerId) {
+      let containerId = row.containerId;
+      let info = await runtime.getContainerInfo(containerId).catch(() => null);
+
+      if (info?.status === "missing" && runtime.listDeploymentContainers) {
+        const liveContainers = await runtime.listDeploymentContainers(deployment.id).catch(() => []);
+        const replacement = liveContainers.find((container) => container.serviceName === service.name);
+        if (replacement?.containerId) {
+          containerId = replacement.containerId;
+          info = await runtime.getContainerInfo(containerId).catch(() => null);
+        }
+      }
+
+      if (info && info.status !== "missing") {
+        liveIp = info.ip ?? liveIp;
+        liveHostPort = info.hostPort ?? liveHostPort;
+
+        if (
+          containerId !== row.containerId ||
+          liveIp !== (row.ip ?? undefined) ||
+          liveHostPort !== (row.hostPort ?? undefined)
+        ) {
+          await repos.service.updateServiceDeployment(row.id, {
+            containerId,
+            ip: liveIp ?? null,
+            hostPort: liveHostPort ?? null,
+            status: info.status,
+          });
+        }
+      }
+    }
+
     const routes = buildServiceRouteDomains({
       project,
       service,
@@ -1006,8 +1087,8 @@ async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean
       if (!route.targetPort) continue;
       const targetUrl = buildUpstreamUrl({
         strategy,
-        ip: row?.ip ?? undefined,
-        hostPort: row?.hostPort ?? undefined,
+        ip: liveIp,
+        hostPort: liveHostPort,
         containerPort: route.targetPort,
       });
       if (!targetUrl) continue;
@@ -1056,49 +1137,20 @@ export async function repairLiveDomainRoutes(
     projects = page.rows as Project[];
   }
 
-  const result: ManualRouteRepairResult = {
-    routedProjects: 0,
-    failed: 0,
-    total: projects.length,
-    details: [],
-  };
+  return repairProjectsLiveDomainRoutes(projects);
+}
 
-  for (const project of projects) {
-    if (!project.activeDeploymentId) {
-      result.details.push({
-        projectId: project.id,
-        slug: project.slug,
-        status: "skipped",
-        error: "project has no active deployment",
-      });
-      continue;
-    }
-
-    try {
-      const routed = await reapplyProjectAndServiceRoutes(project);
-      if (routed) {
-        result.routedProjects++;
-        result.details.push({ projectId: project.id, slug: project.slug, status: "repaired" });
-      } else {
-        result.details.push({
-          projectId: project.id,
-          slug: project.slug,
-          status: "skipped",
-          error: "no live routes were re-applied",
-        });
-      }
-    } catch (err) {
-      result.failed++;
-      result.details.push({
-        projectId: project.id,
-        slug: project.slug,
-        status: "failed",
-        error: safeErrorMessage(err),
-      });
-    }
+/**
+ * System-job variant of repairLiveDomainRoutes(). It is instance-wide and does
+ * not need a user context because jobs already run as trusted local operators.
+ */
+export async function repairAllLiveDomainRoutes(opts: { limit?: number } = {}): Promise<ManualRouteRepairResult> {
+  if (platform().target !== "selfhosted") {
+    return { routedProjects: 0, failed: 0, total: 0, details: [] };
   }
 
-  return result;
+  const projects = (await repos.project.listAllForScan(opts.limit ?? 5000)) as Project[];
+  return repairProjectsLiveDomainRoutes(projects);
 }
 
 /**

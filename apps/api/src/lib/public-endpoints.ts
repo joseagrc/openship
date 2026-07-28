@@ -1,5 +1,5 @@
 import type { Domain, Project, Service } from "@repo/db";
-import { SYSTEM, resolveServiceHostnameLabel, endpointsNeedCloud } from "@repo/core";
+import { SYSTEM, resolveServiceHostnameLabel } from "@repo/core";
 import { getRoutingBaseDomain } from "./routing-domains";
 import { resolveServicePort, serviceKind } from "./deployable-service";
 import { env } from "../config/env";
@@ -374,10 +374,25 @@ export function syncStoredPublicEndpoints(opts: {
 }
 
 export function storedPublicEndpointsNeedCloud(
-  endpoints?: Array<Pick<StoredPublicEndpoint, "domainType">> | null,
+  endpoints?:
+    | Array<Pick<StoredPublicEndpoint, "domainType" | "domain" | "customDomain">>
+    | null,
 ): boolean {
-  // Single definition lives in @repo/core; kept as a named alias for callers.
-  return endpointsNeedCloud(endpoints);
+  if (!endpoints?.length) return false;
+
+  // Decide by hostname, not just the stored domainType. Migrated/stale rows can
+  // misclassify a custom host, but only managed *.<baseDomain> hostnames need
+  // the Cloud edge; real custom hosts route on the self-hosted edge.
+  return endpoints.some((endpoint) => {
+    const custom = normalizeCustomDomain(endpoint.customDomain);
+    if (custom) return !!managedHostnameToSlug(custom);
+
+    const slug = normalizeSlug(endpoint.domain);
+    if (!slug) return false;
+
+    const hostname = slug.includes(".") ? slug : `${slug}${managedHostnameSuffix()}`;
+    return !!managedHostnameToSlug(hostname);
+  });
 }
 
 /**

@@ -13,6 +13,8 @@
  * copy the wizard uses (no duplication).
  */
 
+import { isValidEmail } from "@repo/core";
+
 import { internalPost, waitHealthy, bootstrapAdmin, ensureInternalToken } from "./loopback-api";
 
 export type DomainKind = "byo" | "custom" | "free" | "none";
@@ -37,8 +39,6 @@ export class HeadlessInputError extends Error {
 }
 
 const SLUG_RE = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/;
-const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-
 /** Bare hostname from a URL or `host[:port]`. */
 function hostOf(value: string | undefined): string | undefined {
   const raw = value?.trim();
@@ -74,7 +74,7 @@ export function resolveInstallInputs(flags: InstallFlags): InstallInputs {
   const password = flags.adminPassword ?? process.env.OPENSHIP_ADMIN_PASSWORD;
   const name = flags.adminName?.trim() || (email ? email.split("@")[0]! : "");
 
-  if (!email || !EMAIL_RE.test(email)) {
+  if (!email || !isValidEmail(email)) {
     throw new HeadlessInputError("Missing/invalid --admin-email for a non-interactive install.");
   }
   if (!password || password.length < 8) {
@@ -98,7 +98,11 @@ export function resolveInstallInputs(flags: InstallFlags): InstallInputs {
       if (!["migrate", "takeover", "cancel"].includes(edge)) {
         throw new HeadlessInputError(`Invalid --edge "${flags.edge}" (expected migrate | takeover | cancel).`);
       }
-      return { admin, domain: { kind: "custom", hostname, acmeEmail: flags.acmeEmail?.trim() || email, edge } };
+      const acmeEmail = flags.acmeEmail?.trim() || email;
+      if (!isValidEmail(acmeEmail)) {
+        throw new HeadlessInputError(`Invalid --acme-email "${acmeEmail}" - Let's Encrypt rejects a malformed contact.`);
+      }
+      return { admin, domain: { kind: "custom", hostname, acmeEmail, edge } };
     }
     case "free": {
       const slug = (flags.slug?.trim() || (hostname ? hostname.split(".")[0] : "")).toLowerCase();

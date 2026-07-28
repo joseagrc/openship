@@ -181,6 +181,12 @@ export async function ensureOpenRestyConfig(
   const pidDir = paths.pidPath.replace(/\/[^/]+$/, "");
   await executor.mkdir(pidDir);
 
+  // Base server blocks: the loopback management API and the default catch-all
+  // are written here so an existing install self-heals stale routing guards on
+  // the next deploy.
+  await executor.writeFile(`${paths.sitesDir}/_management.conf`, MANAGEMENT_BLOCK);
+  await executor.writeFile(`${paths.sitesDir}/_default.conf`, DEFAULT_BLOCK);
+
   // Bootstrap: if nginx.conf doesn't exist (e.g. after a reinstall that
   // removed the old config), write a minimal working config.
   if (!(await executor.exists(paths.confPath))) {
@@ -336,7 +342,8 @@ export const ACME_CHALLENGE_LOCATION = `\
     }`;
 
 const DEFAULT_BLOCK = `\
-# Openship default catch-all - prevents the stock OpenResty welcome page
+# Openship default catch-all - prevents the stock OpenResty welcome page and
+# stops an unmatched Host/SNI from being served the first real vhost.
 # Auto-generated - do not edit manually
 server {
     listen 80 default_server;
@@ -347,6 +354,14 @@ ${ACME_CHALLENGE_LOCATION}
     location / {
         return 404;
     }
+}
+
+# HTTPS catch-all. Without a 443 default_server, nginx serves the first-loaded
+# 443 vhost to requests whose SNI matches no server_name. Rejecting unknown SNI
+# avoids cross-serving another app's certificate or backend.
+server {
+    listen 443 ssl default_server;
+    ssl_reject_handshake on;
 }
 `;
 
@@ -587,9 +602,8 @@ export async function deployLuaScripts(
       `sed -i '/http *{/a \\    lua_package_path "/usr/local/openresty/site/lualib/?.lua;;";' ${paths.confPath}`,
   );
 
-  // ── Management server block ──────────────────────────────────────────
-  await executor.writeFile(`${paths.sitesDir}/_management.conf`, MANAGEMENT_BLOCK);
-  await executor.writeFile(`${paths.sitesDir}/_default.conf`, DEFAULT_BLOCK);
+  // Base server blocks (_management.conf + _default.conf) are written by
+  // ensureOpenRestyConfig above.
 
   // ── Validate + reload ────────────────────────────────────────────────
   await executor.exec(buildReloadCommand(paths));

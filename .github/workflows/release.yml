@@ -320,8 +320,7 @@ jobs:
         with:
           name: desktop-${{ matrix.asset }}
           path: |
-            dist/${{ matrix.asset }}
-            dist/${{ matrix.asset }}.sha256
+            dist/*
           if-no-files-found: error
           retention-days: 7
 

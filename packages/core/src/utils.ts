@@ -44,6 +44,19 @@ export function normalizeCustomHostname(raw: string): string {
 }
 
 /**
+ * True when `value` is a plausible email address.
+ *
+ * Intentionally practical, not RFC 5322: common local-part characters, a dotted
+ * domain, and a 2+ letter TLD. This rejects setup typos such as trailing
+ * punctuation before they become unreachable admin or ACME contact addresses.
+ */
+export function isValidEmail(value: string): boolean {
+  const email = value?.trim() ?? "";
+  if (!email || email.length > 254) return false;
+  return /^[A-Za-z0-9._%+-]+@[A-Za-z0-9-]+(\.[A-Za-z0-9-]+)*\.[A-Za-z]{2,}$/.test(email);
+}
+
+/**
  * True when `host` (already run through normalizeCustomHostname) is a plausible
  * public DNS hostname. Rejects the shapes a bare hostname must never contain —
  * embedded path / port / scheme leftovers / whitespace, IPv4 literals,

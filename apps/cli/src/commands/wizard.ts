@@ -32,6 +32,8 @@ import {
   isCancel,
 } from "@clack/prompts";
 
+import { isValidEmail } from "@repo/core";
+
 import { startService, normalizeUrl } from "./up";
 import {
   ensureInternalToken,
@@ -167,7 +169,7 @@ async function promptLocalAdmin(): Promise<{ name: string; email: string; passwo
     await text({
       message: "Email",
       placeholder: "you@example.com",
-      validate: (v) => (v?.includes("@") ? undefined : "Enter a valid email"),
+      validate: (v) => (isValidEmail(v ?? "") ? undefined : "Enter a valid email address"),
     }),
   )
     .trim()

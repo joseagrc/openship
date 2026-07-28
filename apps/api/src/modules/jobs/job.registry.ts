@@ -22,7 +22,11 @@ import { runRetentionSweep } from "../backups/retention-prune";
 import { pruneAuditEvents } from "../audit/audit-prune";
 import { runReconcileSweep } from "../deployments/reconcile-schedule";
 import { runImageGcSweep } from "../deployments/image-gc";
-import { repairDomainRoutesAndSsl, verifyPendingDomains } from "../domains/domain.service";
+import {
+  repairAllLiveDomainRoutes,
+  repairDomainRoutesAndSsl,
+  verifyPendingDomains,
+} from "../domains/domain.service";
 import { scanInstanceUpdates } from "../updates/updates.service";
 import { scanInstanceModules } from "../system/server-modules.service";
 import { runDueOnceJobs } from "./job-command";
@@ -133,8 +137,15 @@ export const SYSTEM_JOB_DEFS: SystemJobDef[] = [
     defaultCron: "*/7 * * * *",
     available: () => platform().target === "selfhosted",
     run: async () => {
-      const r = await repairDomainRoutesAndSsl();
-      return { routedProjects: r.routedProjects, repaired: r.sslRepaired, failed: r.failed, total: r.total };
+      const domainRepair = await repairDomainRoutesAndSsl();
+      const liveRouteRepair = await repairAllLiveDomainRoutes();
+      return {
+        routedProjects: domainRepair.routedProjects + liveRouteRepair.routedProjects,
+        liveRoutesRepaired: liveRouteRepair.routedProjects,
+        repaired: domainRepair.sslRepaired,
+        failed: domainRepair.failed + liveRouteRepair.failed,
+        total: domainRepair.total + liveRouteRepair.total,
+      };
     },
   },
   {
