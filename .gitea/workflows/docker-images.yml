@@ -12,10 +12,16 @@ on:
         description: "Image tag for a manual test. Blank uses the short SHA."
         required: false
         type: string
+      platforms:
+        description: "Comma-separated Docker platforms. Default targets the current amd64 server."
+        required: false
+        default: "linux/amd64"
+        type: string
 
 env:
   REGISTRY: gitea.joseagrc.com
   IMAGE_OWNER: solutema
+  DEFAULT_PLATFORMS: linux/amd64
 
 jobs:
   build-images:
@@ -57,15 +63,28 @@ jobs:
 
           {
             echo "image=${image}"
+            echo "inspect_tag=${tags[0]}"
             echo "tags<<EOF"
             printf '%s\n' "${tags[@]}"
             echo "EOF"
           } >> "$GITHUB_OUTPUT"
 
+      - name: Set build platforms
+        id: platforms
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested="${{ inputs.platforms }}"
+          if [[ -z "${requested}" ]]; then
+            requested="${DEFAULT_PLATFORMS}"
+          fi
+          echo "value=${requested}" >> "$GITHUB_OUTPUT"
+
       - name: Set up QEMU
+        if: contains(steps.platforms.outputs.value, 'arm')
         uses: docker/setup-qemu-action@v3
         with:
-          platforms: arm64
+          platforms: arm64,arm
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -82,9 +101,9 @@ jobs:
         with:
           context: .
           file: apps/${{ matrix.image }}/Dockerfile
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ steps.platforms.outputs.value }}
           push: true
           tags: ${{ steps.tags.outputs.tags }}
 
       - name: Inspect published image
-        run: docker buildx imagetools inspect "${{ steps.tags.outputs.image }}:main" || true
+        run: docker buildx imagetools inspect "${{ steps.tags.outputs.inspect_tag }}" || true
