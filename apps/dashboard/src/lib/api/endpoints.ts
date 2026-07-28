@@ -142,6 +142,7 @@ export const endpoints = {
     preview: "domains/preview",
     byId: (id: string) => `domains/${encodeURIComponent(id)}`,
     verify: (id: string) => `domains/${encodeURIComponent(id)}/verify`,
+    renew: (id: string) => `domains/${encodeURIComponent(id)}/renew`,
     verifySsl: (id: string) => `domains/${encodeURIComponent(id)}/verify-ssl`,
     certificate: (id: string) => `domains/${encodeURIComponent(id)}/certificate`,
     primary: (id: string) => `domains/${encodeURIComponent(id)}/primary`,

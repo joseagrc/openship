@@ -919,24 +919,26 @@ export const DomainSettings = () => {
     return match ? { path: match.path } : null;
   };
 
-  const handleRenewDomainSsl = async (hostname: string) => {
+  const handleRenewDomainSsl = async (domainId: string, hostname: string) => {
     // Guard: ignore re-clicks on the same row while a renew is in flight.
     if (renewingHostname) return;
     setRenewingHostname(hostname);
     try {
-      const result = await deployApi.sslRenew(hostname, false);
+      const result = await domainsApi.renewSsl(domainId);
+      const status = result?.data?.sslStatus;
 
-      if (result.success) {
+      if (status === "active") {
         showToast(interpolate(t.projectSettings.domains.toast.sslRenewed, { hostname }), "success");
         // Pull the canonical sslExpiresAt off the DB row by re-fetching
         // project info. The status pill flips on the next render.
         invalidateProjectCaches(id);
       } else {
         showToast(
-          result.message || result.error || interpolate(t.projectSettings.domains.toast.sslRenewFailed, { hostname }),
+          interpolate(t.projectSettings.domains.toast.sslNoCert, { hostname }),
           "error",
-          result.message,
+          t.projectSettings.domains.toast.sslTitle,
         );
+        invalidateProjectCaches(id);
       }
     } catch (error) {
       console.error("Failed to renew SSL:", error);
@@ -1424,7 +1426,7 @@ export const DomainSettings = () => {
         id: "renew",
         label: isRenewing ? m.renewing : m.renewSsl,
         icon: <ShieldAlert className={isRenewing ? "size-4 animate-spin" : "size-4"} />,
-        onClick: () => void handleRenewDomainSsl(domain.hostname),
+        onClick: () => void handleRenewDomainSsl(domain.domainId!, domain.hostname),
         disabled: isRenewing,
       });
     }
@@ -1469,9 +1471,13 @@ export const DomainSettings = () => {
     opts: { onEdit: () => void; onSetPrimary?: () => void },
   ): React.ReactNode => {
     const canVerify = item.needsVerify && !!item.domainId;
+    const isManagedRow = item.hostname.toLowerCase().endsWith(`.${baseDomain}`);
+    const sslActionable = !item.needsVerify && !!item.domainId;
+    const certbotOwned = !isCloudProject && !isManagedRow;
+    const canRecheckSsl = isCloudProject || !isManagedRow;
     const menuActions = buildDomainMenuActions({
       domain: item,
-      isManagedRow: item.hostname.toLowerCase().endsWith(`.${baseDomain}`),
+      isManagedRow,
       isRenewing: renewingHostname === item.hostname,
       isRechecking: recheckingDomainId === item.domainId,
       onEditRoute: opts.onEdit,
@@ -1488,6 +1494,10 @@ export const DomainSettings = () => {
         verifyHint={verifyHintFor(item.domainId)}
         autoOpenRecords={!!item.domainId && verifyFailure?.domainId === item.domainId}
         loadRecords={canVerify ? () => domainsApi.records(item.domainId!).then((r) => r.data.records) : undefined}
+        onRenewSsl={sslActionable && certbotOwned ? () => void handleRenewDomainSsl(item.domainId!, item.hostname) : undefined}
+        renewingSsl={renewingHostname === item.hostname}
+        onRecheckSsl={sslActionable && canRecheckSsl ? () => void handleRecheckSsl(item.domainId!, item.hostname) : undefined}
+        recheckingSsl={recheckingDomainId === item.domainId}
         onCopy={handleCopy}
         portHint={portHintFor(item.mappedPort, item.serviceId)}
         outputHint={outputHintFor(item.targetPath)}
@@ -2359,6 +2369,10 @@ function DomainOverviewCard({
   onVerify,
   verifying = false,
   verifyHint,
+  onRenewSsl,
+  renewingSsl = false,
+  onRecheckSsl,
+  recheckingSsl = false,
   loadRecords,
   onCopy,
   autoOpenRecords = false,
@@ -2373,6 +2387,10 @@ function DomainOverviewCard({
   verifying?: boolean;
   /** Message naming the DNS record that still isn't resolving after a fail. */
   verifyHint?: string | null;
+  onRenewSsl?: () => void;
+  renewingSsl?: boolean;
+  onRecheckSsl?: () => void;
+  recheckingSsl?: boolean;
   /** Lazy-fetch the DNS records for this row (pending custom domains only). */
   loadRecords?: () => Promise<DnsRecord[]>;
   onCopy?: (text: string) => void | Promise<void>;
@@ -2386,6 +2404,8 @@ function DomainOverviewCard({
   const { t } = useI18n();
   const d = t.projectSettings.domains;
   const canVerify = domain.needsVerify && !!domain.domainId;
+  const sslNeedsAttention = !domain.needsVerify && domain.ssl.tone !== "success";
+  const canRepairSsl = sslNeedsAttention && (!!onRenewSsl || !!onRecheckSsl);
   const [recordsOpen, setRecordsOpen] = useState(false);
   const [records, setRecords] = useState<DnsRecord[] | null>(null);
   const [recordsLoading, setRecordsLoading] = useState(false);
@@ -2512,6 +2532,33 @@ function DomainOverviewCard({
             ) : null}
           </div>
         ) : null}
+
+        {canRepairSsl ? (
+          <div className="flex flex-wrap items-center gap-2 border-t border-border/40 pt-3">
+            {onRenewSsl ? (
+              <button
+                type="button"
+                onClick={onRenewSsl}
+                disabled={renewingSsl}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-primary px-3.5 text-[13px] font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {renewingSsl ? <Loader2 className="size-3.5 animate-spin" /> : <ShieldAlert className="size-3.5" />}
+                {renewingSsl ? d.menu.renewing : d.menu.renewSsl}
+              </button>
+            ) : null}
+            {onRecheckSsl ? (
+              <button
+                type="button"
+                onClick={onRecheckSsl}
+                disabled={recheckingSsl}
+                className="inline-flex min-h-9 items-center gap-1.5 rounded-xl bg-foreground/[0.06] px-3.5 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {recheckingSsl ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+                {recheckingSsl ? d.menu.rechecking : d.menu.recheckSsl}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -2555,4 +2602,3 @@ function DnsRecordRow({
     </div>
   );
 }
-

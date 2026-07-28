@@ -32,6 +32,13 @@ export interface DomainSslVerifyResult {
   verified: boolean;
 }
 
+export interface DomainSslRenewResult {
+  domain: string;
+  sslStatus: string;
+  expiresAt?: string | null;
+  issuer?: string | null;
+}
+
 export const domainsApi = {
   /** Get DNS records preview for a hostname (no domain creation needed). */
   previewRecords: (hostname: string) =>
@@ -65,6 +72,13 @@ export const domainsApi = {
    *  re-see exactly what to add at any time — not only right after connect. */
   records: (domainId: string) =>
     api.get<{ data: DomainDnsRecords }>(endpoints.domains.records(domainId)),
+
+  /**
+   * Provision/renew SSL for an existing verified domain row. This uses the
+   * domain id so route cards can repair the exact row shown in Domains & Routes.
+   */
+  renewSsl: (domainId: string) =>
+    api.post<{ data: DomainSslRenewResult }>(endpoints.domains.renew(domainId)),
 
   /**
    * Recheck SSL: read-only verification that the Let's Encrypt cert is actually
