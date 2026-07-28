@@ -39,6 +39,18 @@ export interface DomainSslRenewResult {
   issuer?: string | null;
 }
 
+export interface DomainRouteRepairResult {
+  routedProjects: number;
+  failed: number;
+  total: number;
+  details: Array<{
+    projectId: string;
+    slug: string;
+    status: "repaired" | "skipped" | "failed";
+    error?: string;
+  }>;
+}
+
 export const domainsApi = {
   /** Get DNS records preview for a hostname (no domain creation needed). */
   previewRecords: (hostname: string) =>
@@ -72,6 +84,13 @@ export const domainsApi = {
    *  re-see exactly what to add at any time — not only right after connect. */
   records: (domainId: string) =>
     api.get<{ data: DomainDnsRecords }>(endpoints.domains.records(domainId)),
+
+  /**
+   * Re-apply self-hosted vhosts/upstreams for a project/org. Useful after
+   * containers are recreated outside Openship and Docker bridge IPs change.
+   */
+  repairRoutes: (body: { projectId?: string; limit?: number } = {}) =>
+    api.post<{ data: DomainRouteRepairResult }>(endpoints.domains.repairRoutes, body),
 
   /**
    * Provision/renew SSL for an existing verified domain row. This uses the

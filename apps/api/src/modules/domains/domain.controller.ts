@@ -284,3 +284,36 @@ export async function verifyPending(c: Context) {
   });
   return c.json({ data: result });
 }
+
+/** POST /domains/repair-routes - manually re-apply self-hosted vhosts/upstreams */
+export async function repairRoutes(c: Context) {
+  const ctx = getRequestContext(c);
+  type Body = { projectId?: string; limit?: number };
+  const body: Body = await c.req.json<Body>().catch(() => ({} as Body));
+
+  if (body.projectId) {
+    await permission.assert(ctx, {
+      resourceType: "project",
+      resourceId: body.projectId,
+      action: "write",
+    });
+  }
+
+  const result = await domainService.repairLiveDomainRoutes(ctx, {
+    projectId: body.projectId,
+    limit: typeof body.limit === "number" ? body.limit : undefined,
+  });
+
+  audit.recordAsync(auditContextFrom(c, ctx.organizationId, ctx.userId), {
+    eventType: "domain.routes_repaired",
+    resourceType: body.projectId ? "project" : "domain",
+    resourceId: body.projectId ?? ctx.organizationId,
+    after: {
+      routedProjects: result.routedProjects,
+      failed: result.failed,
+      total: result.total,
+    },
+  });
+
+  return c.json({ data: result });
+}

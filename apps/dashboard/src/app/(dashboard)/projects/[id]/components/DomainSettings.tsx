@@ -262,6 +262,7 @@ export const DomainSettings = () => {
     classification?: "free" | "ours" | "known" | "unknown";
     reachable?: boolean | null;
   }>({ loading: false, ready: false });
+  const [repairingRoutes, setRepairingRoutes] = useState(false);
   const checkEdge = useCallback(async () => {
     if (!selfHosted || isCloudProject) return; // cloud projects use the Oblien edge — no local edge-status
     setEdge((e) => ({ ...e, loading: true }));
@@ -293,6 +294,34 @@ export const DomainSettings = () => {
       }),
     [openEdgeModal, id, router, checkEdge],
   );
+
+  const repairRoutes = useCallback(async () => {
+    if (repairingRoutes) return;
+    setRepairingRoutes(true);
+    try {
+      const res = await domainsApi.repairRoutes({ projectId: id });
+      const data = res.data;
+      invalidateProjectCaches(id);
+      router.refresh();
+      if (data.failed > 0) {
+        const firstFailure = data.details.find((detail) => detail.status === "failed");
+        showToast(
+          firstFailure?.error || "Some routes could not be repaired.",
+          "error",
+          "Route repair failed",
+        );
+      } else if (data.routedProjects > 0) {
+        showToast("Routes repaired and edge reloaded.", "success", "Routes repaired");
+      } else {
+        const skipped = data.details.find((detail) => detail.status === "skipped");
+        showToast(skipped?.error || "No live routes needed repair.", "success", "Routes checked");
+      }
+    } catch (error) {
+      showToast(getApiErrorMessage(error, "Failed to repair routes."), "error", "Route repair failed");
+    } finally {
+      setRepairingRoutes(false);
+    }
+  }, [id, repairingRoutes, router, showToast]);
 
   const [newDomain, setNewDomain] = useState("");
   // Unified "add domain" = add a route: pick free/custom + the port it maps to.
@@ -515,6 +544,15 @@ export const DomainSettings = () => {
             className="text-[12px] text-muted-foreground transition-colors hover:text-foreground"
           >
             {t.projectSettings.domains.edge.recheck}
+          </button>
+          <button
+            type="button"
+            onClick={() => void repairRoutes()}
+            disabled={repairingRoutes}
+            className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-foreground/[0.06] px-3 py-2 text-[13px] font-medium text-foreground transition-colors hover:bg-foreground/[0.1] disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {repairingRoutes ? <Loader2 className="size-3.5 animate-spin" /> : <RefreshCw className="size-3.5" />}
+            {repairingRoutes ? "Repairing routes..." : "Repair routes"}
           </button>
         </span>
       );

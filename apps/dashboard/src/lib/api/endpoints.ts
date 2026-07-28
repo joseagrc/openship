@@ -140,6 +140,7 @@ export const endpoints = {
   /* ---------------------------------------------------------------- */
   domains: {
     preview: "domains/preview",
+    repairRoutes: "domains/repair-routes",
     byId: (id: string) => `domains/${encodeURIComponent(id)}`,
     verify: (id: string) => `domains/${encodeURIComponent(id)}/verify`,
     renew: (id: string) => `domains/${encodeURIComponent(id)}/renew`,

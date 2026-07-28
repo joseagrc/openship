@@ -960,6 +960,18 @@ export interface RouteRepairResult {
   details: Array<{ hostname: string; status: "repaired" | "failed" | "skipped"; error?: string }>;
 }
 
+export interface ManualRouteRepairResult {
+  routedProjects: number;
+  failed: number;
+  total: number;
+  details: Array<{
+    projectId: string;
+    slug: string;
+    status: "repaired" | "skipped" | "failed";
+    error?: string;
+  }>;
+}
+
 async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean> {
   if (!project.activeDeploymentId) return false;
 
@@ -1013,6 +1025,80 @@ async function reapplyProjectAndServiceRoutes(project: Project): Promise<boolean
   }
 
   return true;
+}
+
+/**
+ * Manual operator-triggered route repair. Unlike repairDomainRoutesAndSsl(),
+ * this re-applies every live route for the selected project/org even when the
+ * domain row already reads active. That recovers vhosts whose upstream Docker
+ * IPs went stale after containers were recreated outside Openship.
+ */
+export async function repairLiveDomainRoutes(
+  ctx: RequestContext,
+  opts: { projectId?: string; limit?: number } = {},
+): Promise<ManualRouteRepairResult> {
+  if (platform().target !== "selfhosted") {
+    return { routedProjects: 0, failed: 0, total: 0, details: [] };
+  }
+
+  const limit = opts.limit ?? 100;
+  let projects: Project[] = [];
+
+  if (opts.projectId) {
+    const project = await repos.project.findById(opts.projectId);
+    assertResourceInOrg(project, "Project", ctx.organizationId, opts.projectId);
+    projects = project ? [project as Project] : [];
+  } else {
+    const page = await repos.project.listByOrganization(ctx.organizationId, {
+      page: 1,
+      perPage: limit,
+    });
+    projects = page.rows as Project[];
+  }
+
+  const result: ManualRouteRepairResult = {
+    routedProjects: 0,
+    failed: 0,
+    total: projects.length,
+    details: [],
+  };
+
+  for (const project of projects) {
+    if (!project.activeDeploymentId) {
+      result.details.push({
+        projectId: project.id,
+        slug: project.slug,
+        status: "skipped",
+        error: "project has no active deployment",
+      });
+      continue;
+    }
+
+    try {
+      const routed = await reapplyProjectAndServiceRoutes(project);
+      if (routed) {
+        result.routedProjects++;
+        result.details.push({ projectId: project.id, slug: project.slug, status: "repaired" });
+      } else {
+        result.details.push({
+          projectId: project.id,
+          slug: project.slug,
+          status: "skipped",
+          error: "no live routes were re-applied",
+        });
+      }
+    } catch (err) {
+      result.failed++;
+      result.details.push({
+        projectId: project.id,
+        slug: project.slug,
+        status: "failed",
+        error: safeErrorMessage(err),
+      });
+    }
+  }
+
+  return result;
 }
 
 /**

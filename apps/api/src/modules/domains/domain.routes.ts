@@ -50,5 +50,10 @@ r.post(
 );
 r.post("/renew-all", { tag: "domain:write" }, ctrl.renewAllSsl);
 r.post("/verify-pending", { tag: "domain:write" }, ctrl.verifyPending);
+r.post(
+  "/repair-routes",
+  { tag: "domain:write", localOnly: true, mcp: { description: "Manually re-apply self-hosted domain vhosts/upstreams without rebuilding containers." } },
+  ctrl.repairRoutes,
+);
 
 export const domainRoutes = r.hono;
