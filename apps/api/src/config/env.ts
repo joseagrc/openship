@@ -144,10 +144,10 @@ const envSchema = z.object({
 
   /* ---------- Update source (self-hosted/desktop) ---------- */
   /**
-   * GitHub owner/repo used for update checks, release links, and pinned
-   * advisory manifests. Forked self-hosted installs can set
-   * OPENSHIP_UPDATE_REPO=joseagrc/openship without depending on the upstream
-   * oblien/openship release stream.
+   * VCS repository used for update checks, release links, and pinned advisory
+   * manifests. Accepts GitHub owner/repo, GitHub/Gitea/GitLab URLs, or a
+   * generic Git URL. Generic sources are stored and linked, but release checks
+   * require a known provider.
    */
   OPENSHIP_UPDATE_REPO: z.string().default(DEFAULT_UPDATE_REPO),
   /** Branch used by source installs and source links. Release checks stay tag-pinned. */

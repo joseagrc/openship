@@ -11,11 +11,11 @@
 
 import { useCallback, useEffect, useState } from "react";
 import {
-  advisoryManifestUrl,
-  releasesLatestApi,
   parseManifest,
   resolveUpdateState,
   compareSemver,
+  updateSourceAdvisoryManifestUrl,
+  updateSourceConfig,
   type AdvisoryManifest,
   type LatestRelease,
   type UpdateSourceConfig,
@@ -101,8 +101,8 @@ let remoteCache: {
 async function fetchRemote(
   updateSource?: UpdateSourceConfig | null,
 ): Promise<{ latest: LatestRelease | null; manifest: AdvisoryManifest | null }> {
-  const repo = updateSource?.repo;
-  const key = repo ?? "default";
+  const source = updateSource ?? updateSourceConfig();
+  const key = `${source.provider}:${source.repo}:${source.releasesApiUrl ?? ""}`;
   if (remoteCache?.key !== key) {
     remoteCache = {
       key,
@@ -110,20 +110,35 @@ async function fetchRemote(
         let latest: LatestRelease | null = null;
         let manifest: AdvisoryManifest | null = null;
         try {
-          const res = await fetch(releasesLatestApi(repo), {
+          const releasesApiUrl = source.releasesApiUrl;
+          if (!releasesApiUrl) return { latest, manifest };
+          const res = await fetch(releasesApiUrl, {
             headers: { Accept: "application/vnd.github+json" },
           });
           if (res.ok) {
-            const data = (await res.json()) as { tag_name?: string; body?: string };
-            const tag = data.tag_name ?? "";
+            const data = (await res.json()) as {
+              tag_name?: string;
+              tagName?: string;
+              name?: string;
+              body?: string;
+              description?: string;
+            };
+            const tag = data.tag_name ?? data.tagName ?? "";
             if (tag) {
-              latest = { version: tag.replace(/^v/, ""), tag, notes: data.body ?? "" };
+              latest = {
+                version: tag.replace(/^v/, ""),
+                tag,
+                notes: data.body ?? data.description ?? "",
+              };
               // Advisories pinned to the release TAG — main commits never surface.
               try {
-                const m = await fetch(advisoryManifestUrl(tag, repo), {
-                  headers: { Accept: "application/json" },
-                });
-                if (m.ok) manifest = parseManifest(await m.json());
+                const manifestUrl = updateSourceAdvisoryManifestUrl(tag, source);
+                if (manifestUrl) {
+                  const m = await fetch(manifestUrl, {
+                    headers: { Accept: "application/json" },
+                  });
+                  if (m.ok) manifest = parseManifest(await m.json());
+                }
               } catch {
                 /* no manifest at this tag → no advisories */
               }
@@ -272,6 +287,10 @@ export function useUpdates(): UseUpdates {
     deployInfo?.version,
     deployInfo?.selfHosted,
     deployInfo?.updateSource?.repo,
+    deployInfo?.updateSource?.provider,
+    deployInfo?.updateSource?.releasesApiUrl,
+    deployInfo?.updateSource?.repoUrl,
+    deployInfo?.updateSource?.releasesUrl,
     deployInfo?.updateSource?.branch,
     deployInfo?.updateSource?.channel,
   ]);

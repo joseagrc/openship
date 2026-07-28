@@ -82,7 +82,7 @@ export function UpdatesTab() {
   const [sourceError, setSourceError] = useState<string | null>(null);
   const releasesUrl = updateSource?.releasesUrl ?? "https://github.com/oblien/openship/releases";
   const repoUrl = updateSource?.repoUrl ?? "https://github.com/oblien/openship";
-  const repoLabel = `github.com/${updateSource?.repo ?? "oblien/openship"}`;
+  const repoLabel = updateSource?.repoUrl?.replace(/^https?:\/\//, "") ?? "github.com/oblien/openship";
 
   useEffect(() => {
     if (!desktop) return;
@@ -240,11 +240,11 @@ export function UpdatesTab() {
       >
         <div className="grid gap-4 md:grid-cols-2">
           <label className="space-y-1.5">
-            <span className="text-[12px] font-medium text-muted-foreground">GitHub repo</span>
+            <span className="text-[12px] font-medium text-muted-foreground">VCS repository</span>
             <input
               value={sourceForm.repo ?? ""}
               onChange={(e) => setSourceField("repo", e.target.value)}
-              placeholder="oblien/openship"
+              placeholder="owner/repo or https://gitea.example.com/org/repo.git"
               className="h-9 w-full rounded-lg border border-border/60 bg-background px-3 text-[13px] outline-none transition-colors focus:border-foreground/40"
             />
           </label>
@@ -295,9 +295,9 @@ export function UpdatesTab() {
         <div className="mt-4 rounded-lg border border-border/50 bg-muted/20 px-3 py-2 text-[12.5px] text-muted-foreground">
           Effective source:{" "}
           <span className="font-medium text-foreground">
-            {updateSource?.repo ?? "oblien/openship"}
+            {updateSource?.repoUrl ?? "https://github.com/oblien/openship"}
           </span>{" "}
-          · {updateSource?.channel ?? "release"} · {updateSource?.imageRegistry ?? "ghcr.io/oblien"}
+          · {updateSource?.provider ?? "github"} · {updateSource?.channel ?? "release"} · {updateSource?.imageRegistry ?? "ghcr.io/oblien"}
           {updateSource?.version ? `:${updateSource.version}` : ""}
         </div>
 
@@ -331,11 +331,9 @@ export function UpdatesTab() {
         iconColor="text-success"
       >
         <p className="text-[13.5px] leading-relaxed text-muted-foreground">
-          {t.settings.updates.security1}{" "}
-          <span className="font-medium text-foreground">
-            {t.settings.updates.securityOnlyGithub}
-          </span>{" "}
-          {t.settings.updates.security2}
+          Openship pulls update metadata from the repository source configured above. Known
+          providers can expose release and advisory checks; generic Git sources are retained for
+          source/docker workflows but may not support automatic release discovery. Current source:{" "}
           <a
             href={repoUrl}
             target="_blank"
@@ -343,10 +341,7 @@ export function UpdatesTab() {
             className="text-foreground underline underline-offset-4"
           >
             {repoLabel}
-          </a>
-          {t.settings.updates.security3}{" "}
-          <span className="font-medium text-foreground">{t.settings.updates.securityPulls}</span>{" "}
-          {t.settings.updates.security4}
+          </a>.
         </p>
       </SettingsSection>
     </div>

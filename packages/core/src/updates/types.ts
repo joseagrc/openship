@@ -76,10 +76,29 @@ export const DEFAULT_UPDATE_BRANCH = "main";
 export const DEFAULT_IMAGE_REGISTRY = "ghcr.io/oblien";
 
 export type UpdateChannel = "release" | "docker" | "source";
+export type UpdateSourceProvider = "github" | "gitea" | "gitlab" | "generic";
+
+export interface NormalizedUpdateRepository {
+  /** Human-readable repository id. GitHub owner/repo stays backwards-compatible. */
+  repo: string;
+  provider: UpdateSourceProvider;
+  host: string | null;
+  path: string;
+  owner: string | null;
+  repoName: string | null;
+  repoUrl: string;
+  releasesApiUrl: string | null;
+  releasesUrl: string;
+}
 
 export interface UpdateSourceConfig {
-  /** GitHub owner/repo used for release lookup and pinned advisory manifests. */
+  /** Repository identifier or URL used for update checks and links. */
   repo: string;
+  provider: UpdateSourceProvider;
+  host: string | null;
+  path: string;
+  owner: string | null;
+  repoName: string | null;
   /** Branch used by source installs and "view source" links. */
   branch: string;
   /** Preferred update mechanism for this install. */
@@ -89,7 +108,7 @@ export interface UpdateSourceConfig {
   /** Running/pinned image or release version when known. */
   version: string | null;
   repoUrl: string;
-  releasesApiUrl: string;
+  releasesApiUrl: string | null;
   releasesUrl: string;
   changelogUrl: string;
 }
@@ -101,25 +120,88 @@ function cleanPathPart(input: string): string {
   return input.trim().replace(/^\/+|\/+$/g, "");
 }
 
-export function normalizeGithubRepo(input?: string | null): string {
-  const raw = (input ?? "").trim();
-  if (!raw) return DEFAULT_UPDATE_REPO;
+function stripGitSuffix(input: string): string {
+  return input.replace(/\.git$/i, "");
+}
 
-  const withoutGit = raw.replace(/\.git$/i, "");
+function inferProvider(host: string): UpdateSourceProvider {
+  const lower = host.toLowerCase();
+  if (lower === "github.com" || lower === "www.github.com") return "github";
+  if (lower.includes("gitlab")) return "gitlab";
+  if (lower.includes("gitea")) return "gitea";
+  return "generic";
+}
+
+function repoPathParts(path: string): { owner: string | null; repoName: string | null } {
+  const parts = cleanPathPart(stripGitSuffix(path)).split("/").filter(Boolean);
+  if (parts.length < 2) return { owner: null, repoName: null };
+  return {
+    owner: parts.slice(0, -1).join("/"),
+    repoName: parts[parts.length - 1] ?? null,
+  };
+}
+
+function releaseApiUrl(provider: UpdateSourceProvider, host: string, path: string): string | null {
+  const encodedPath = cleanPathPart(path)
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  if (!encodedPath) return null;
+  if (provider === "github") return `https://api.github.com/repos/${encodedPath}/releases/latest`;
+  if (provider === "gitea") return `https://${host}/api/v1/repos/${encodedPath}/releases/latest`;
+  if (provider === "gitlab")
+    return `https://${host}/api/v4/projects/${encodeURIComponent(cleanPathPart(path))}/releases/permalink/latest`;
+  return null;
+}
+
+export function normalizeUpdateRepository(input?: string | null): NormalizedUpdateRepository {
+  const raw = (input ?? "").trim();
+  if (!raw) return normalizeUpdateRepository(DEFAULT_UPDATE_REPO);
+
+  const withoutGit = stripGitSuffix(raw);
   try {
     const url = new URL(withoutGit);
-    if (url.hostname !== "github.com" && url.hostname !== "www.github.com")
-      return DEFAULT_UPDATE_REPO;
-    const parts = cleanPathPart(url.pathname).split("/");
-    return parts.length >= 2 && parts[0] && parts[1]
-      ? `${parts[0]}/${parts[1]}`
-      : DEFAULT_UPDATE_REPO;
+    const host = url.hostname.replace(/^www\./i, "");
+    const provider = inferProvider(host);
+    const path = cleanPathPart(url.pathname);
+    const { owner, repoName } = repoPathParts(path);
+    if (!path || !repoName) return normalizeUpdateRepository(DEFAULT_UPDATE_REPO);
+    const repo = provider === "github" ? path : `${host}/${path}`;
+    const repoUrl = `${url.protocol}//${host}/${path}`;
+    const releasesUrl =
+      provider === "gitlab" ? `${repoUrl}/-/releases` : provider === "generic" ? repoUrl : `${repoUrl}/releases`;
+    return {
+      repo,
+      provider,
+      host,
+      path,
+      owner,
+      repoName,
+      repoUrl,
+      releasesApiUrl: releaseApiUrl(provider, host, path),
+      releasesUrl,
+    };
   } catch {
-    const parts = cleanPathPart(withoutGit).split("/");
-    return parts.length === 2 && parts[0] && parts[1]
-      ? `${parts[0]}/${parts[1]}`
-      : DEFAULT_UPDATE_REPO;
+    const path = cleanPathPart(withoutGit);
+    const { owner, repoName } = repoPathParts(path);
+    if (!owner || !repoName) return normalizeUpdateRepository(DEFAULT_UPDATE_REPO);
+    return {
+      repo: path,
+      provider: "github",
+      host: "github.com",
+      path,
+      owner,
+      repoName,
+      repoUrl: `https://github.com/${path}`,
+      releasesApiUrl: releaseApiUrl("github", "github.com", path),
+      releasesUrl: `https://github.com/${path}/releases`,
+    };
   }
+}
+
+export function normalizeGithubRepo(input?: string | null): string {
+  const normalized = normalizeUpdateRepository(input);
+  return normalized.provider === "github" ? normalized.path : DEFAULT_UPDATE_REPO;
 }
 
 export function normalizeUpdateChannel(input?: string | null): UpdateChannel {
@@ -127,7 +209,7 @@ export function normalizeUpdateChannel(input?: string | null): UpdateChannel {
 }
 
 export function githubRepoUrl(repo = DEFAULT_UPDATE_REPO): string {
-  return `https://github.com/${normalizeGithubRepo(repo)}`;
+  return normalizeUpdateRepository(repo).repoUrl;
 }
 
 /** GitHub API: the latest published (non-prerelease) release. */
@@ -144,15 +226,43 @@ export const RELEASES_LATEST_API = releasesLatestApi();
  * `main` are invisible to clients. Returns null for an empty tag.
  */
 export function advisoryManifestUrl(tag: string, repo = DEFAULT_UPDATE_REPO): string {
-  return `https://raw.githubusercontent.com/${normalizeGithubRepo(repo)}/${encodeURIComponent(tag)}/release-advisories.json`;
+  const source = normalizeUpdateRepository(repo);
+  return updateSourceAdvisoryManifestUrl(tag, source) ?? "";
 }
 
 /** Human-facing changelog link — a specific tag's notes, or all releases. */
 export function changelogUrl(tag?: string, repo = DEFAULT_UPDATE_REPO): string {
-  const normalizedRepo = normalizeGithubRepo(repo);
-  return tag
-    ? `https://github.com/${normalizedRepo}/releases/tag/${encodeURIComponent(tag)}`
-    : `https://github.com/${normalizedRepo}/releases`;
+  const source = normalizeUpdateRepository(repo);
+  return updateSourceChangelogUrl(tag, source);
+}
+
+export function updateSourceChangelogUrl(
+  tag?: string,
+  source: Pick<NormalizedUpdateRepository, "provider" | "repoUrl" | "releasesUrl"> = normalizeUpdateRepository(),
+): string {
+  if (!tag) return source.releasesUrl;
+  const encoded = encodeURIComponent(tag);
+  if (source.provider === "github" || source.provider === "gitea")
+    return `${source.repoUrl}/releases/tag/${encoded}`;
+  if (source.provider === "gitlab") return `${source.repoUrl}/-/releases/${encoded}`;
+  return source.repoUrl;
+}
+
+export function updateSourceAdvisoryManifestUrl(
+  tag: string,
+  source: Pick<NormalizedUpdateRepository, "provider" | "host" | "path" | "repoUrl">,
+): string | null {
+  if (!tag) return null;
+  const encodedTag = encodeURIComponent(tag);
+  const encodedPath = source.path
+    .split("/")
+    .map((part) => encodeURIComponent(part))
+    .join("/");
+  if (source.provider === "github")
+    return `https://raw.githubusercontent.com/${encodedPath}/${encodedTag}/release-advisories.json`;
+  if (source.provider === "gitea") return `${source.repoUrl}/raw/tag/${encodedTag}/release-advisories.json`;
+  if (source.provider === "gitlab") return `${source.repoUrl}/-/raw/${encodedTag}/release-advisories.json`;
+  return null;
 }
 
 export function updateSourceConfig(
@@ -164,20 +274,25 @@ export function updateSourceConfig(
     version: string | null;
   }>,
 ): UpdateSourceConfig {
-  const repo = normalizeGithubRepo(input?.repo);
+  const source = normalizeUpdateRepository(input?.repo);
   const branch = (input?.branch ?? "").trim() || DEFAULT_UPDATE_BRANCH;
   const channel = normalizeUpdateChannel(input?.channel);
   const imageRegistry = (input?.imageRegistry ?? "").trim() || DEFAULT_IMAGE_REGISTRY;
   const version = (input?.version ?? "").trim() || null;
   return {
-    repo,
+    repo: source.repo,
+    provider: source.provider,
+    host: source.host,
+    path: source.path,
+    owner: source.owner,
+    repoName: source.repoName,
     branch,
     channel,
     imageRegistry,
     version,
-    repoUrl: githubRepoUrl(repo),
-    releasesApiUrl: releasesLatestApi(repo),
-    releasesUrl: changelogUrl(undefined, repo),
-    changelogUrl: changelogUrl(undefined, repo),
+    repoUrl: source.repoUrl,
+    releasesApiUrl: source.releasesApiUrl,
+    releasesUrl: source.releasesUrl,
+    changelogUrl: updateSourceChangelogUrl(undefined, source),
   };
 }
